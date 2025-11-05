@@ -1,10 +1,22 @@
+from typing import Any, Dict, Optional
+
+import torch.nn as nn
+
 from llmrouter.models.meta_router import MetaRouter
 
 
 def parse_size(size_str: str) -> float:
     """
-    Convert a model size string (e.g., '7B', '13B', '512M') into a numeric value (in billions).
-    Only supports numeric parsing with unit suffixes K, M, B, T.
+    Parse a model size string (e.g., '7B', '13B', '512M') into
+    a numeric value in billions.
+
+    Supported suffixes:
+        - K: thousands
+        - M: millions
+        - B: billions
+        - T: trillions
+
+    If parsing fails, this function returns 0.0.
     """
     size_str = str(size_str).strip().upper()
     try:
@@ -17,6 +29,7 @@ def parse_size(size_str: str) -> float:
         elif size_str.endswith("T"):
             return float(size_str[:-1]) * 1e3
         else:
+            # Treat raw numeric string as billions directly
             return float(size_str)
     except Exception:
         return 0.0
@@ -24,37 +37,83 @@ def parse_size(size_str: str) -> float:
 
 class LargestLLM(MetaRouter):
     """
-    Always select the largest LLM (based on the 'size' field) that ends with 'B'.
+    LargestLLM Router
+    -----------------
+    A heuristic router that always selects the largest LLM based on the
+    'size' field in `self.llm_data`, restricted to models whose size
+    string ends with 'B'.
+
+    This router does not perform any learning and does not depend on
+    the input batch. It only uses metadata loaded from the YAML config.
     """
 
     def __init__(self, yaml_path: str):
-        super().__init__(yaml_path)
+        """
+        Initialize the LargestLLM router.
+
+        Args:
+            yaml_path (str):
+                Path to the YAML configuration file. The corresponding
+                DataLoader is expected to populate `self.llm_data` based
+                on this configuration.
+        """
+        # Use a dummy model because this router does not train or forward
+        dummy_model = nn.Identity()
+        super().__init__(model=dummy_model, yaml_path=yaml_path)
         print("✅ LargestLLM initialized successfully")
 
-    def inference(self):
+    def route(self, batch: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        Select the largest LLM (by size) whose size string ends with 'B'.
+
+        This method ignores the input batch and purely relies on
+        `self.llm_data`, which should be attached by DataLoader during
+        MetaRouter initialization.
+
+        Args:
+            batch (Any, optional):
+                Unused input. Kept for interface compatibility.
+
+        Returns:
+            dict:
+                A dictionary containing:
+                    - "model_name": name of the selected model
+                    - "model_size": size string of the selected model
+                    - "model_info": full metadata entry from `self.llm_data`
+        """
         if not hasattr(self, "llm_data") or not self.llm_data:
-            raise ValueError("LLM data not loaded or missing in YAML configuration.")
+            raise ValueError(
+                "LLM data not loaded or missing in YAML configuration. "
+                "Expected `self.llm_data` to be populated by DataLoader."
+            )
 
         # Filter only models whose size ends with 'B'
         filtered_names = [
-            name for name, info in self.llm_data.items()
-            if isinstance(info.get("size", ""), str) and info["size"].upper().endswith("B")
+            name
+            for name, info in self.llm_data.items()
+            if isinstance(info.get("size", ""), str)
+            and info["size"].upper().endswith("B")
         ]
 
         if not filtered_names:
-            raise ValueError("No models with size ending in 'B' found in llm_data.")
+            raise ValueError(
+                "No models with size ending in 'B' found in `llm_data`."
+            )
 
-        # Find the largest model among those
+        # Find the largest model among the filtered candidates
         largest_model_name = max(
             filtered_names,
-            key=lambda k: parse_size(self.llm_data[k].get("size", "0B"))
+            key=lambda k: parse_size(self.llm_data[k].get("size", "0B")),
         )
 
         largest_model = self.llm_data[largest_model_name]
-        print(f"🚀 Largest model (ending with 'B') selected: {largest_model_name} ({largest_model.get('size')})")
+        print(
+            f"🚀 Largest model (ending with 'B') selected: "
+            f"{largest_model_name} ({largest_model.get('size')})"
+        )
 
         return {
             "model_name": largest_model_name,
             "model_size": largest_model.get("size"),
-            "model_info": largest_model
+            "model_info": largest_model,
         }
