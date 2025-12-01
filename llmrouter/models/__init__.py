@@ -22,6 +22,9 @@ from .elorouter import EloRouterTrainer
 from .automix import AutomixRouter
 from .automix import AutomixRouterTrainer
 
+from .dcrouter import DCRouter
+from .dcrouter import DCTrainer
+
 
 __all__ = [
     "MetaRouter",
@@ -43,6 +46,9 @@ __all__ = [
 
     "EloRouter",
     "EloRouterTrainer",
+
+    "DCRouter",
+    "DCTrainer",
 
     "AutomixRouter",
     "AutomixRouterTrainer",
