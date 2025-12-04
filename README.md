@@ -1,5 +1,5 @@
 <div style="width: 100%;">
-    <img src="assets/llmrouter_banner.png" style="width: 100%;"></img>
+    <img src="assets/llmrouter.png" style="width: 100%;"></img>
 </div>
 
 <h1 align="center">LLMRouter: An Open-Source Library for LLM Routing</h1>
