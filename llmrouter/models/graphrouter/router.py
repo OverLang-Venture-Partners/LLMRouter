@@ -8,7 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from llmrouter.models.meta_router import MetaRouter
 from llmrouter.utils import get_longformer_embedding
-from graph_nn import FormData, GNNPredictor
+from .graph_nn import FormData, GNNPredictor
 
 
 class GraphRouter(MetaRouter):

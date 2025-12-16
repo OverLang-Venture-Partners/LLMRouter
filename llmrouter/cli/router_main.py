@@ -251,6 +251,12 @@ def version_command(args):
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser with subcommands."""
+    try:
+        import llmrouter
+        cli_version = getattr(llmrouter, "__version__", "unknown")
+    except Exception:
+        cli_version = "unknown"
+
     parser = argparse.ArgumentParser(
         description="LLMRouter - Intelligent Model Routing for Large Language Models",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -276,7 +282,7 @@ For more information on each subcommand, use:
     parser.add_argument(
         "--version",
         action="version",
-        version="LLMRouter CLI v1.0.0",
+        version=f"LLMRouter CLI v{cli_version}",
         help="Show version and exit",
     )
 

@@ -78,19 +78,20 @@ def init_providers() -> None:
         from huggingface_hub import login
 
         os.environ.pop("HF_ENDPOINT", None)
-        hf_token = _env_or(
-            "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", "HF_TOKEN", "HUGGINGFACE_TOKEN"
-        )
-        login(token=hf_token)
+        hf_token = _env_or("", "HF_TOKEN", "HUGGINGFACE_TOKEN")
+        if hf_token:
+            login(token=hf_token)
+        else:
+            print("Warning: HF_TOKEN not set; skipping HuggingFace login")
 
         api_key = _env_or(
-            (
-                "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"
-            ),
+            "",
             "OPENAI_API_KEY",
             "NVIDIA_API_KEY",
             "NVAPI_KEY",
         )
+        if not api_key:
+            raise ValueError("Missing API key; set OPENAI_API_KEY/NVIDIA_API_KEY/NVAPI_KEY")
         api_base = _env_or(
             "https://integrate.api.nvidia.com/v1",
             "OPENAI_API_BASE",
@@ -106,6 +107,8 @@ def init_providers() -> None:
         )
     except ImportError:
         print("Warning: Some API providers could not be initialized")
+    except Exception as e:
+        print(f"Warning: Some API providers could not be initialized: {e}")
 
 
 # ============================================================================
@@ -324,17 +327,16 @@ def call_openai_api(
         return None
 
     # Get API credentials from global client
-    api_key = _env_or(
-        "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",
-        "OPENAI_API_KEY",
-        "NVIDIA_API_KEY",
-        "NVAPI_KEY",
-    )
+    api_key = _env_or("", "OPENAI_API_KEY", "NVIDIA_API_KEY", "NVAPI_KEY")
     api_base = _env_or(
         "https://integrate.api.nvidia.com/v1",
         "OPENAI_API_BASE",
         "NVIDIA_API_BASE",
     )
+
+    if not api_key:
+        print("Error: Missing API key; set OPENAI_API_KEY/NVIDIA_API_KEY/NVAPI_KEY")
+        return None
 
     # Use get_llm_response_via_api for retry mechanism
     # Handle n > 1 by calling multiple times (like original implementation)

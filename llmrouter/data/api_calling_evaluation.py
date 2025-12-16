@@ -29,6 +29,7 @@ from typing import Dict, List, Tuple, Optional, Union
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -36,9 +37,15 @@ import torch
 from tqdm import tqdm
 from litellm import Router
 
+# Allow importing local helper packages under repo `data/` (e.g., `human_eval`, `mbpp`)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_LOCAL_DATA_DIR = _PROJECT_ROOT / "data"
+if _LOCAL_DATA_DIR.exists() and str(_LOCAL_DATA_DIR) not in sys.path:
+    sys.path.insert(0, str(_LOCAL_DATA_DIR))
+
 # Import utils
 from llmrouter.utils import (
-    setup_environment, API_KEYS,
+    setup_environment,
     format_mc_prompt, format_gsm8k_prompt, format_math_prompt,
     format_commonsense_qa_prompt, format_mbpp_prompt, format_humaneval_prompt,
     generate_task_query, ProgressTracker, to_tensor, clean_df,
@@ -47,12 +54,42 @@ from llmrouter.utils import (
 
 # Import evaluation functions
 from llmrouter.utils import f1_score, exact_match_score, get_bert_score, evaluate_code, cem_score
-from human_eval.evaluate_functional_correctness import entry_point_item
-from mbpp.mbpp_eval import entry_point_item_mbpp
-from math_eval import last_boxed_only_string, remove_boxed, is_equiv
+try:
+    from human_eval.evaluate_functional_correctness import entry_point_item
+except ImportError:  # pragma: no cover
+    entry_point_item = None
+
+try:
+    from mbpp.mbpp_eval import entry_point_item_mbpp
+except ImportError:  # pragma: no cover
+    entry_point_item_mbpp = None
+
+from llmrouter.data.math_eval import last_boxed_only_string, remove_boxed, is_equiv
 
 # Setup environment
 setup_environment()
+
+
+def _parse_api_keys_env() -> List[str]:
+    api_keys_env = (os.environ.get("API_KEYS") or "").strip()
+    if not api_keys_env:
+        return []
+
+    try:
+        parsed = json.loads(api_keys_env)
+        if isinstance(parsed, list):
+            return [str(k).strip() for k in parsed if str(k).strip()]
+        if isinstance(parsed, str) and parsed.strip():
+            return [parsed.strip()]
+    except Exception:
+        pass
+
+    # Fallback: comma-separated list
+    return [k.strip() for k in api_keys_env.split(",") if k.strip()]
+
+
+API_KEYS = _parse_api_keys_env()
+
 
 class LiteLLMRouterManager:
     """Manages LiteLLM Router instances for different models"""
@@ -77,6 +114,11 @@ class LiteLLMRouterManager:
     
     def _create_routers(self):
         """Create Router instances for each model"""
+        if not API_KEYS:
+            raise ValueError(
+                "API_KEYS is not set. Set env var `API_KEYS` to a single key or a JSON list of keys."
+            )
+
         for model_name in self.allowed_models:
             api_model_name = self.config[model_name]["model"]
             
@@ -344,6 +386,10 @@ def eval_perf(metric, prediction, ground_truth, task_name, task_id=None):
                 code = prediction.strip()
 
             mbpp_sample = {"task_id": int(task_id), "completion": code}
+            if entry_point_item_mbpp is None:
+                raise ImportError(
+                    "MBPP evaluation helpers not available. Ensure repo `data/mbpp` is importable (e.g., run from repo root)."
+                )
             pass_1 = entry_point_item_mbpp(mbpp_sample, '/data/taofeng2/Router_bench/dataset/Code/mbpp.jsonl')
             return pass_1['pass@1']
 
@@ -358,8 +404,12 @@ def eval_perf(metric, prediction, ground_truth, task_name, task_id=None):
                     code = "    " + raw_code.replace("\n", "\n    ")
             else:
                 code = prediction.strip()
-            
+             
             dict = {"task_id": task_id, "completion": code}
+            if entry_point_item is None:
+                raise ImportError(
+                    "HumanEval evaluation helpers not available. Ensure repo `data/human_eval` is importable (e.g., run from repo root)."
+                )
             pass_1 = entry_point_item(dict, '/data/taofeng2/Router_bench/dataset/Code/HumanEval.jsonl')
             return pass_1['pass@1']
 

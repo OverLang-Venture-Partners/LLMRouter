@@ -1,13 +1,12 @@
 import re
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
-from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 
 from llmrouter.models.router_r1.prompt_pool import *
 from llmrouter.models.meta_router import MetaRouter
-from llmrouter.models.router_r1.route_service import access_routing_pool
 
 
 
@@ -36,18 +35,54 @@ class RouterR1(MetaRouter):
         self.api_base = self.cfg["hparam"]["api_base"]
         self.api_key = self.cfg["hparam"]["api_key"]
 
-    def route_single(self, query: Dict[str, Any]):
+    @staticmethod
+    def get_query(text: str) -> Optional[str]:
+        pattern = re.compile(r"<search>(.*?)</search>", re.DOTALL)
+        matches = pattern.findall(text)
+        return matches[-1] if matches else None
+
+    @staticmethod
+    def route(query: str, api_base: str, api_key: str) -> str:
+        try:
+            from llmrouter.models.router_r1.route_service import access_routing_pool
+        except ImportError as e:
+            raise ImportError(
+                "RouterR1 requires the optional dependency `openai` (used in `route_service.py`). "
+                "Install it with: `pip install openai`."
+            ) from e
+
+        ret = access_routing_pool(
+            queries=[query],
+            api_base=api_base,
+            api_key=api_key,
+        )
+        return ret["result"][0]
+
+    def route_single(self, query: Dict[str, Any]) -> str:
         """
         Perform inference on Router-R1.
         """
         # Prepare the question
-        question = query["query"].strip()
-        if question[-1] != '?':
-            question += '?'
+        question = str(query.get("query", "")).strip()
+        if not question:
+            raise ValueError("RouterR1.route_single requires non-empty 'query' field")
+        if not question.endswith("?"):
+            question += "?"
+
+        try:
+            from vllm import LLM, SamplingParams
+        except ImportError as e:
+            raise ImportError(
+                "RouterR1 requires the optional dependency `vllm`. Install it with: `pip install vllm`."
+            ) from e
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("RouterR1 currently requires CUDA (vLLM GPU runtime).")
 
         # Model path and tokenizer
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
-        llm = LLM(model=self.model_id, dtype="float16", tensor_parallel_size=torch.cuda.device_count())
+        tensor_parallel_size = max(1, torch.cuda.device_count())
+        llm = LLM(model=self.model_id, dtype="float16", tensor_parallel_size=tensor_parallel_size)
 
         curr_route_template = '\n{output_text}\n<information>{route_results}</information>\n'
 
@@ -105,16 +140,26 @@ class RouterR1(MetaRouter):
         print(all_output)
 
         print('\n\n################# [Output] ##################\n\n')
+        return all_output.strip()
 
-    def get_query(text):
-        pattern = re.compile(r"<search>(.*?)</search>", re.DOTALL)
-        matches = pattern.findall(text)
-        return matches[-1] if matches else None
+    def route_batch(self, batch: Optional[Any] = None) -> List[Dict[str, Any]]:
+        """
+        Route a batch of queries.
 
-    def route(query, api_base, api_key):
-        ret = access_routing_pool(
-            queries=[query],
-            api_base=api_base,
-            api_key=api_key
-        )
-        return ret['result'][0]
+        Note: RouterR1 is an agentic router; this implementation simply runs
+        `route_single` per query and returns a list of {query, response}.
+        """
+        data = batch if batch is not None else getattr(self, "query_data_test", None)
+        if data is None:
+            raise ValueError("No batch provided and `query_data_test` is not available.")
+
+        results: List[Dict[str, Any]] = []
+        for row in data:
+            query_text = row.get("query") if isinstance(row, dict) else str(row)
+            results.append(
+                {
+                    "query": query_text,
+                    "response": self.route_single({"query": query_text}),
+                }
+            )
+        return results

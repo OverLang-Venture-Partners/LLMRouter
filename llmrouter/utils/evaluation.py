@@ -1,17 +1,12 @@
 import json
+import os
 import re
 import string
 import pickle
 from collections import Counter
-from typing import List, Optional, Tuple,Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
-import torch
-from sentence_transformers import SentenceTransformer
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from bert_score import score
-import litellm
 
 
 # File I/O functions
@@ -281,11 +276,19 @@ def get_bert_score(generate_response: List[str], ground_truth: List[str]) -> flo
     Returns:
         Average BERT score (F1)
     """
+    try:
+        from bert_score import score as bert_score
+    except ImportError as e:  # pragma: no cover
+        raise ImportError(
+            "BERTScore metric requires extra dependency `bert-score`. "
+            "Install it with: `pip install bert-score`."
+        ) from e
+
     F_l = []
     for inter in range(len(generate_response)):
         generation = generate_response[inter]
         gt = ground_truth[inter]
-        P, R, F = score([generation], [gt], lang="en", verbose=True)
+        P, R, F = bert_score([generation], [gt], lang="en", verbose=False)
         F_l.append(F.mean().numpy().reshape(1)[0])
     return np.array(F_l).mean()
 
@@ -314,9 +317,11 @@ def evaluate_code(generated_code, test_cases, timeout=5):
         raise TimeoutError("Code execution timed out")
     
     try:
-        # Set timeout
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(timeout)
+        # Set timeout (SIGALRM is not available on Windows)
+        alarm_supported = hasattr(signal, "SIGALRM")
+        if alarm_supported:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout)
         
         # Execute the generated code
         exec(generated_code, {}, local_vars)
@@ -337,7 +342,8 @@ def evaluate_code(generated_code, test_cases, timeout=5):
         return False
     finally:
         # Disable the alarm
-        signal.alarm(0)
+        if hasattr(signal, "SIGALRM"):
+            signal.alarm(0)
 
 # LLM prompting
 # def model_prompting(
@@ -368,7 +374,7 @@ def evaluate_code(generated_code, test_cases, timeout=5):
 #         model=llm_model,
 #         messages=[{'role': 'user', 'content': prompt}],
 #         max_tokens=max_token_num,
-#         api_key= "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",
+#         api_key=os.environ.get("NVAPI_KEY", ""),
 #         api_base="https://integrate.api.nvidia.com/v1",
 #         n=return_num,
 #         top_p=top_p,
@@ -378,13 +384,10 @@ def evaluate_code(generated_code, test_cases, timeout=5):
 #     content = completion.choices[0].message.content
 #     return content
 
-from openai import OpenAI
-client = OpenAI(
-    base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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",  # 替换为你的 API key
-    timeout=300,
-    max_retries=2
-)
+try:
+    from openai import OpenAI
+except ImportError:  # pragma: no cover
+    OpenAI = None
 
 def model_prompting(
     llm_model: str,
@@ -393,7 +396,7 @@ def model_prompting(
     temperature: Optional[float] = 0.2,
     top_p: Optional[float] = 0.7,
     stream: Optional[bool] = True,
-) -> Union[str, None]:
+) -> str:
     """
     Get a response from an LLM model using the OpenAI-compatible NVIDIA API.
 
@@ -407,8 +410,38 @@ def model_prompting(
         stream: Whether to stream the response
 
     Returns:
-        Generated text response (or None if streaming is enabled)
+        Generated text response
     """
+    if OpenAI is None:  # pragma: no cover
+        raise ImportError(
+            "Optional dependency `openai` is required for model_prompting(). "
+            "Install it with: `pip install openai`."
+        )
+
+    api_key = (
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("NVIDIA_API_KEY")
+        or os.environ.get("NVAPI_KEY")
+        or ""
+    ).strip()
+    if not api_key:
+        raise ValueError(
+            "Missing API key for model_prompting(); set OPENAI_API_KEY/NVIDIA_API_KEY/NVAPI_KEY."
+        )
+
+    base_url = (
+        os.environ.get("OPENAI_API_BASE")
+        or os.environ.get("NVIDIA_API_BASE")
+        or "https://integrate.api.nvidia.com/v1"
+    ).strip()
+
+    client = OpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        timeout=300,
+        max_retries=2,
+    )
+
     completion = client.chat.completions.create(
         model=llm_model,
         messages=[{"role": "user", "content": prompt}],
@@ -419,8 +452,10 @@ def model_prompting(
     )
 
     response_text = ""
-    for chunk in completion:
-        if chunk.choices[0].delta.content is not None:
-            response_text += chunk.choices[0].delta.content
-    # print(response_text)
-    return response_text
+    if stream:
+        for chunk in completion:
+            if chunk.choices[0].delta.content is not None:
+                response_text += chunk.choices[0].delta.content
+        return response_text
+
+    return completion.choices[0].message.content or ""

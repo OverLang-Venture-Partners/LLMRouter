@@ -5,6 +5,7 @@ This script provides a Gradio-based chat interface that uses LLMRouter
 to route queries to appropriate models and generate responses.
 """
 
+import atexit
 import argparse
 import os
 import yaml
@@ -20,6 +21,9 @@ from llmrouter.models import (
     MFRouter,
     EloRouter,
     DCRouter,
+    HybridLLMRouter,
+    GraphRouter,
+    CausalLMRouter,
     SmallestLLM,
     LargestLLM,
 )
@@ -33,6 +37,52 @@ from llmrouter.utils import call_api, get_longformer_embedding
 import torch
 import numpy as np
 
+
+def _safe_unlink(path: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+def _normalize_chat_history(history: Any) -> list[tuple[str, str]]:
+    if not history:
+        return []
+
+    if isinstance(history, (list, tuple)) and history:
+        first = history[0]
+        if isinstance(first, (list, tuple)) and len(first) == 2:
+            normalized: list[tuple[str, str]] = []
+            for human, assistant in history:
+                human_text = "" if human is None else str(human)
+                assistant_text = "" if assistant is None else str(assistant)
+                normalized.append((human_text, assistant_text))
+            return normalized
+
+        if isinstance(first, dict) and "role" in first:
+            normalized: list[tuple[str, str]] = []
+            current_user: Optional[str] = None
+            for msg in history:
+                if not isinstance(msg, dict):
+                    continue
+                role = msg.get("role")
+                content = msg.get("content")
+                content_text = "" if content is None else str(content)
+                if role == "user":
+                    current_user = content_text
+                elif role == "assistant":
+                    if current_user is None:
+                        normalized.append(("", content_text))
+                    else:
+                        normalized.append((current_user, content_text))
+                        current_user = None
+            if current_user is not None:
+                normalized.append((current_user, ""))
+            return normalized
+
+    return []
+
+
 # Router registry: maps router method names to their classes
 ROUTER_REGISTRY = {
     "knnrouter": KNNRouter,
@@ -41,11 +91,25 @@ ROUTER_REGISTRY = {
     "mfrouter": MFRouter,
     "elorouter": EloRouter,
     "dcrouter": DCRouter,
+    "routerdc": DCRouter,
     "smallest_llm": SmallestLLM,
     "largest_llm": LargestLLM,
     "llmmultiroundrouter": LLMMultiRoundRouter,
     "knnmultiroundrouter": KNNMultiRoundRouter,
 }
+
+# Add optional routers if available
+if HybridLLMRouter is not None:
+    ROUTER_REGISTRY["hybrid_llm"] = HybridLLMRouter
+    ROUTER_REGISTRY["hybridllm"] = HybridLLMRouter
+
+if GraphRouter is not None:
+    ROUTER_REGISTRY["graphrouter"] = GraphRouter
+    ROUTER_REGISTRY["graph_router"] = GraphRouter
+
+if CausalLMRouter is not None:
+    ROUTER_REGISTRY["causallm_router"] = CausalLMRouter
+    ROUTER_REGISTRY["causallmrouter"] = CausalLMRouter
 
 # Add RouterR1 if available
 if RouterR1 is not None:
@@ -66,11 +130,7 @@ ROUTERS_REQUIRING_SPECIAL_ARGS = {
 }
 
 # Routers that are not supported for chat interface
-# GraphRouter requires a model parameter and doesn't have route_single
-UNSUPPORTED_ROUTERS = {
-    "graphrouter",
-    "graph_router",
-}
+UNSUPPORTED_ROUTERS = {}
 
 
 def prepare_query_full_context(message: str, history: list) -> str:
@@ -86,7 +146,7 @@ def prepare_query_full_context(message: str, history: list) -> str:
     """
     # Build full context from history
     context_parts = []
-    for human, assistant in history:
+    for human, assistant in _normalize_chat_history(history):
         context_parts.append(f"Previous Query: {human}")
         context_parts.append(f"Previous Response: {assistant}")
     
@@ -124,7 +184,8 @@ def prepare_query_retrieval(message: str, history: list, top_k: int = 3) -> str:
     Returns:
         Combined query string with retrieved context
     """
-    if not history:
+    history_pairs = _normalize_chat_history(history)
+    if not history_pairs:
         # No history, just return current query
         return message
     
@@ -139,8 +200,8 @@ def prepare_query_retrieval(message: str, history: list, top_k: int = 3) -> str:
             current_embedding = current_embedding.flatten()
         
         # Get embeddings for all historical queries
-        historical_queries = [human for human, _ in history]
-        historical_responses = [assistant for _, assistant in history]
+        historical_queries = [human for human, _ in history_pairs]
+        historical_responses = [assistant for _, assistant in history_pairs]
         
         if not historical_queries:
             return message
@@ -249,7 +310,7 @@ def load_router(router_name: str, config_path: str, load_model_path: Optional[st
     if load_model_path:
         # Read config, modify, write to temp file
         with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
         
         if "model_path" not in config:
             config["model_path"] = {}
@@ -257,10 +318,10 @@ def load_router(router_name: str, config_path: str, load_model_path: Optional[st
         
         # Write to temp config file
         import tempfile
-        temp_config = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
-        yaml.dump(config, temp_config)
-        temp_config.close()
-        config_path = temp_config.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as temp_config:
+            yaml.safe_dump(config, temp_config)
+            config_path = temp_config.name
+        atexit.register(_safe_unlink, config_path)
     
     # Initialize router
     # Note: RouterR1 might need special handling, but test shows it can be initialized with just yaml_path
@@ -303,9 +364,10 @@ def predict(
         Generated response text (string)
     """
     router_name_lower = router_name.lower()
-    
+    history_pairs = _normalize_chat_history(history)
+     
     # Prepare query based on mode
-    query_for_router = prepare_query_by_mode(message, history, mode, top_k)
+    query_for_router = prepare_query_by_mode(message, history_pairs, mode, top_k)
     
     # Check if router has answer_query method (full pipeline)
     if router_name_lower in ROUTERS_WITH_ANSWER_QUERY and hasattr(router_instance, "answer_query"):
@@ -321,19 +383,17 @@ def predict(
     if router_name_lower in ROUTERS_REQUIRING_SPECIAL_ARGS:
         try:
             # Get required parameters from config
-            cfg = router_instance.cfg
-            model_id = cfg.get("model_id", "ulab-ai/Router-R1-Qwen2.5-3B-Instruct")
-            api_base = cfg.get("api_base", None)
-            api_key = cfg.get("api_key", None)
-            
+            cfg = getattr(router_instance, "cfg", {}) or {}
+            hparam = cfg.get("hparam", {}) or {}
+            api_base = hparam.get("api_base") or getattr(router_instance, "api_base", None)
+            api_key = hparam.get("api_key") or getattr(router_instance, "api_key", None)
+             
             if not api_key or not api_base:
                 return "Error: RouterR1 requires api_key and api_base in yaml config"
-            
-            # RouterR1's route_single returns None (prints output), so we need to handle it differently
-            # For now, indicate that RouterR1 needs special implementation
+             
             result = router_instance.route_single({"query": query_for_router})
             return result
-            
+             
         except Exception as e:
             return f"Error with RouterR1: {str(e)}"
     
@@ -373,7 +433,7 @@ def predict(
         
         # Build prompt with chat history
         prompt = "You are a helpful AI assistant.\n\n"
-        for human, assistant in history:
+        for human, assistant in history_pairs:
             prompt += f"User: {human}\nAssistant: {assistant}\n\n"
         prompt += f"User: {message}\nAssistant:"
         
@@ -450,6 +510,11 @@ def main():
         default=3,
         help="Number of similar queries to retrieve in retrieval mode (default: 3)",
     )
+    parser.add_argument(
+        "--share",
+        action="store_true",
+        help="Create a public shareable link",
+    )
     
     args = parser.parse_args()
     
@@ -500,7 +565,7 @@ def main():
         description=f"Chat interface using {args.router} router | Mode: {args.mode}",
     )
     
-    interface.queue().launch(server_name=args.host, server_port=args.port, share=True)
+    interface.queue().launch(server_name=args.host, server_port=args.port, share=args.share)
 
 
 if __name__ == "__main__":
