@@ -23,6 +23,7 @@ from llmrouter.models import (
     DCRouter,
     SmallestLLM,
     LargestLLM,
+    AutomixRouter,
 )
 from llmrouter.models.llmmultiroundrouter import LLMMultiRoundRouter
 from llmrouter.models.knnmultiroundrouter import KNNMultiRoundRouter
@@ -44,6 +45,7 @@ ROUTER_REGISTRY = {
     "largest_llm": LargestLLM,
     "llmmultiroundrouter": LLMMultiRoundRouter,
     "knnmultiroundrouter": KNNMultiRoundRouter,
+    "automixrouter": AutomixRouter,
 }
 
 # Add RouterR1 if available
