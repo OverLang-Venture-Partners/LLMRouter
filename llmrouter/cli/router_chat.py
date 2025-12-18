@@ -132,6 +132,57 @@ CUSTOM_CSS = """
     color: #1e3a8a !important;
 }
 
+/* --- CODE BLOCKS IN CHAT --- */
+/* Style code blocks in chat messages for readability */
+.main-chat pre,
+.main-chat code,
+.message pre,
+.message code {
+    background-color: #f8fafc !important;
+    color: #1e293b !important;
+    border: 1px solid #e2e8f0 !important;
+}
+
+/* Inline code */
+.main-chat code:not(pre code),
+.message code:not(pre code) {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-size: 0.9em !important;
+    border: 1px solid #e2e8f0 !important;
+}
+
+/* Code blocks (pre) */
+.main-chat pre,
+.message pre {
+    background-color: #f8fafc !important;
+    color: #1e293b !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+    overflow-x: auto !important;
+    margin: 8px 0 !important;
+}
+
+/* Code inside pre blocks */
+.main-chat pre code,
+.message pre code {
+    background-color: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: #1e293b !important;
+}
+
+/* Ensure text in code blocks is always readable */
+.main-chat pre *,
+.message pre *,
+.main-chat code *,
+.message code * {
+    color: #1e293b !important;
+}
+
 /* --- INPUT AREA --- */
 .input-row textarea {
     border-radius: 12px !important;
