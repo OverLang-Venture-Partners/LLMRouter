@@ -19,7 +19,6 @@ import torch.nn as nn
 from llmrouter.models.meta_router import MetaRouter
 from .model import AutomixModel
 from .methods import Threshold, POMDP, SelfConsistency
-from llmrouter.utils.data_convert import convert_data, convert_train_data, merge_train_test
 from .data_pipeline import prepare_automix_data
 
 

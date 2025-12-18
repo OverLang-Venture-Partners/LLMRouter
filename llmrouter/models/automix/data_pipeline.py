@@ -78,33 +78,20 @@ def init_providers() -> None:
         from huggingface_hub import login
 
         os.environ.pop("HF_ENDPOINT", None)
-        hf_token = _env_or(
-            "", "HF_TOKEN", "HUGGINGFACE_TOKEN"
-        )
-        # Only attempt login if token is provided and not empty
-        if hf_token and hf_token.strip():
-            try:
-                login(token=hf_token)
-            except Exception as e:
-                # If login fails, print warning but continue
-                # (public models don't require auth)
-                print(f"[Warning] Failed to login to Hugging Face: {str(e)}")
-                msg = ("[Info] Continuing without HF authentication "
-                       "(public models should still work)")
-                print(msg)
+        hf_token = _env_or("", "HF_TOKEN", "HUGGINGFACE_TOKEN")
+        if hf_token:
+            login(token=hf_token)
         else:
-            msg = ("[Info] No Hugging Face token provided, "
-                   "skipping login (public models should still work)")
-            print(msg)
+            print("Warning: HF_TOKEN not set; skipping HuggingFace login")
 
         api_key = _env_or(
-            (
-                ""
-            ),
+            "",
             "OPENAI_API_KEY",
             "NVIDIA_API_KEY",
             "NVAPI_KEY",
         )
+        if not api_key:
+            raise ValueError("Missing API key; set OPENAI_API_KEY/NVIDIA_API_KEY/NVAPI_KEY")
         api_base = _env_or(
             "https://integrate.api.nvidia.com/v1",
             "OPENAI_API_BASE",
@@ -119,7 +106,9 @@ def init_providers() -> None:
             timeout=60
         )
     except ImportError:
-        pass
+        print("Warning: Some API providers could not be initialized")
+    except Exception as e:
+        print(f"Warning: Some API providers could not be initialized: {e}")
 
 
 # ============================================================================
@@ -335,17 +324,16 @@ def call_openai_api(
         return None
 
     # Get API credentials from global client
-    api_key = _env_or(
-        "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",
-        "OPENAI_API_KEY",
-        "NVIDIA_API_KEY",
-        "NVAPI_KEY",
-    )
+    api_key = _env_or("", "OPENAI_API_KEY", "NVIDIA_API_KEY", "NVAPI_KEY")
     api_base = _env_or(
         "https://integrate.api.nvidia.com/v1",
         "OPENAI_API_BASE",
         "NVIDIA_API_BASE",
     )
+
+    if not api_key:
+        print("Error: Missing API key; set OPENAI_API_KEY/NVIDIA_API_KEY/NVAPI_KEY")
+        return None
 
     # Use get_llm_response_via_api for retry mechanism
     # Handle n > 1 by calling multiple times (like original implementation)

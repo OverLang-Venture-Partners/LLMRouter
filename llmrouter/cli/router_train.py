@@ -49,6 +49,7 @@ ROUTER_TRAINER_REGISTRY: Dict[str, Tuple[Any, Any]] = {
     "mfrouter": (MFRouter, MFRouterTrainer),
     "elorouter": (EloRouter, EloRouterTrainer),
     "dcrouter": (DCRouter, DCTrainer),
+    "routerdc": (DCRouter, DCTrainer),
     "automix": (AutomixRouter, AutomixRouterTrainer),
     "automixrouter": (AutomixRouter, AutomixRouterTrainer),
     "hybrid_llm": (HybridLLMRouter, HybridLLMTrainer),      
@@ -67,6 +68,19 @@ UNSUPPORTED_ROUTERS = {
     "router_r1": "RouterR1 is a pre-trained model and does not support training via this CLI",
     "router-r1": "RouterR1 is a pre-trained model and does not support training via this CLI",
 }
+
+# Filter out routers whose optional deps are unavailable
+_optional_missing = []
+for _name, (_router_cls, _trainer_cls) in list(ROUTER_TRAINER_REGISTRY.items()):
+    if _router_cls is None or _trainer_cls is None:
+        _optional_missing.append(_name)
+        ROUTER_TRAINER_REGISTRY.pop(_name, None)
+
+for _name in _optional_missing:
+    UNSUPPORTED_ROUTERS[_name] = (
+        "Optional dependencies missing for this router/trainer; "
+        "install the extra requirements and try again."
+    )
 
 
 def get_device(device_arg: Optional[str] = None) -> str:

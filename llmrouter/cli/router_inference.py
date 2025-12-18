@@ -5,6 +5,7 @@ This script provides non-interactive inference functionality for LLMRouter.
 It supports single query inference, batch inference from file, and various output modes.
 """
 
+import atexit
 import argparse
 import json
 import os
@@ -21,6 +22,9 @@ from llmrouter.models import (
     MFRouter,
     EloRouter,
     DCRouter,
+    HybridLLMRouter,
+    GraphRouter,
+    CausalLMRouter,
     SmallestLLM,
     LargestLLM,
     AutomixRouter,
@@ -33,6 +37,14 @@ except ImportError:
     RouterR1 = None
 from llmrouter.utils import call_api
 
+
+def _safe_unlink(path: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
 # Router registry: maps router method names to their classes
 ROUTER_REGISTRY = {
     "knnrouter": KNNRouter,
@@ -41,12 +53,26 @@ ROUTER_REGISTRY = {
     "mfrouter": MFRouter,
     "elorouter": EloRouter,
     "dcrouter": DCRouter,
+    "routerdc": DCRouter,
     "smallest_llm": SmallestLLM,
     "largest_llm": LargestLLM,
     "llmmultiroundrouter": LLMMultiRoundRouter,
     "knnmultiroundrouter": KNNMultiRoundRouter,
     "automixrouter": AutomixRouter,
 }
+
+# Add optional routers if available
+if HybridLLMRouter is not None:
+    ROUTER_REGISTRY["hybrid_llm"] = HybridLLMRouter
+    ROUTER_REGISTRY["hybridllm"] = HybridLLMRouter
+
+if GraphRouter is not None:
+    ROUTER_REGISTRY["graphrouter"] = GraphRouter
+    ROUTER_REGISTRY["graph_router"] = GraphRouter
+
+if CausalLMRouter is not None:
+    ROUTER_REGISTRY["causallm_router"] = CausalLMRouter
+    ROUTER_REGISTRY["causallmrouter"] = CausalLMRouter
 
 # Add RouterR1 if available
 if RouterR1 is not None:
@@ -66,10 +92,7 @@ ROUTERS_REQUIRING_SPECIAL_ARGS = {
 }
 
 # Routers that are not supported
-UNSUPPORTED_ROUTERS = {
-    "graphrouter",
-    "graph_router",
-}
+UNSUPPORTED_ROUTERS = {}
 
 
 def load_router(router_name: str, config_path: str, load_model_path: Optional[str] = None):
@@ -104,7 +127,7 @@ def load_router(router_name: str, config_path: str, load_model_path: Optional[st
     if load_model_path:
         # Read config, modify, write to temp file
         with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
 
         if "model_path" not in config:
             config["model_path"] = {}
@@ -112,10 +135,10 @@ def load_router(router_name: str, config_path: str, load_model_path: Optional[st
 
         # Write to temp config file
         import tempfile
-        temp_config = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
-        yaml.dump(config, temp_config)
-        temp_config.close()
-        config_path = temp_config.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as temp_config:
+            yaml.safe_dump(config, temp_config)
+            config_path = temp_config.name
+        atexit.register(_safe_unlink, config_path)
 
     # Initialize router
     try:
@@ -148,7 +171,14 @@ def route_query(
     Returns:
         Dictionary containing routing result
     """
-    _ = router_name  # Kept for API consistency
+    router_name_lower = router_name.lower()
+    if router_name_lower in ROUTERS_REQUIRING_SPECIAL_ARGS:
+        return {
+            "success": False,
+            "query": query,
+            "error": f"Router '{router_name}' does not support --route-only; run without --route-only.",
+        }
+
     try:
         # Route the query
         query_input = {"query": query}
@@ -231,9 +261,10 @@ def infer_query(
     if router_name_lower in ROUTERS_REQUIRING_SPECIAL_ARGS:
         try:
             # Get required parameters from config
-            cfg = router_instance.cfg
-            api_base = cfg.get("api_base", None)
-            api_key = cfg.get("api_key", None)
+            cfg = getattr(router_instance, "cfg", {}) or {}
+            hparam = cfg.get("hparam", {}) or {}
+            api_base = hparam.get("api_base") or getattr(router_instance, "api_base", None)
+            api_key = hparam.get("api_key") or getattr(router_instance, "api_key", None)
 
             if not api_key or not api_base:
                 return {
@@ -376,17 +407,17 @@ def load_queries_from_file(file_path: str) -> List[str]:
             return [line.strip() for line in f if line.strip()]
 
 
-def save_results_to_file(results: List[Dict[str, Any]], output_path: str, format: str = "json"):
+def save_results_to_file(results: List[Dict[str, Any]], output_path: str, output_format: str = "json"):
     """
     Save results to a file.
 
     Args:
         results: List of result dictionaries
         output_path: Path to output file
-        format: Output format - "json" or "jsonl"
+        output_format: Output format - "json" or "jsonl"
     """
     with open(output_path, "w", encoding="utf-8") as f:
-        if format == "jsonl":
+        if output_format == "jsonl":
             for result in results:
                 f.write(json.dumps(result, ensure_ascii=False) + "\n")
         else:  # json
@@ -544,7 +575,7 @@ Examples:
                 else:
                     print(f"Response generated", file=sys.stderr)
             else:
-                print(f"  L Error: {result.get('error')}", file=sys.stderr)
+                print(f"  └ Error: {result.get('error')}", file=sys.stderr)
 
     # Output results
     if args.output:

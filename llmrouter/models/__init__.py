@@ -25,16 +25,27 @@ from .automix import AutomixRouterTrainer
 from .routerdc import DCRouter
 from .routerdc import DCTrainer
 
-# from .hybrid_llm import HybridLLMRouter
-# from .hybrid_llm import HybridLLMTrainer
+from .hybrid_llm import HybridLLMRouter
+from .hybrid_llm import HybridLLMTrainer
 
-# from .graphrouter import GraphRouter
-# from .graphrouter import GraphTrainer
+try:
+    from .graphrouter import GraphRouter
+    from .graphrouter import GraphTrainer
+except Exception:
+    GraphRouter = None
+    GraphTrainer = None
 
-# from .causallm_router import CausalLMRouter
-# from .causallm_router import CausalLMTrainer
+try:
+    from .causallm_router import CausalLMRouter
+    from .causallm_router import CausalLMTrainer
+except Exception:
+    CausalLMRouter = None
+    CausalLMTrainer = None
 
-# from .router_r1 import RouterR1
+try:
+    from .router_r1 import RouterR1
+except Exception:
+    RouterR1 = None
 
 __all__ = [
     "MetaRouter",

@@ -2,21 +2,54 @@
 Embedding utilities for LLMRouter scripts (Longformer version)
 """
 
-from transformers import AutoTokenizer, AutoModel
+import os
 import torch
+from transformers import AutoModel, AutoTokenizer
 
 
-# -------------------------
-# 1. Model and tokenizer initialization
-# -------------------------
-model_name: str = "allenai/longformer-base-4096"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModel.from_pretrained(model_name)
+# Model config
+_MODEL_NAME: str = "allenai/longformer-base-4096"
 
-# Automatically select device
-device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-print(f"Longformer model loaded on {device}.")
+# Lazy-loaded globals
+_tokenizer = None
+_model = None
+_device = None
+
+
+def _get_device() -> torch.device:
+    """
+    Select device for embedding model.
+
+    Override with env var `LLMROUTER_EMBEDDING_DEVICE` (e.g. "cpu", "cuda", "cuda:0").
+    """
+    global _device
+    if _device is not None:
+        return _device
+
+    device_override = (os.environ.get("LLMROUTER_EMBEDDING_DEVICE") or "").strip()
+    if device_override:
+        _device = torch.device(device_override)
+        return _device
+
+    if torch.cuda.is_available():
+        _device = torch.device("cuda")
+    elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        _device = torch.device("mps")
+    else:
+        _device = torch.device("cpu")
+    return _device
+
+
+def _init_model():
+    """Initialize tokenizer/model on first use."""
+    global _tokenizer, _model
+    if _tokenizer is not None and _model is not None:
+        return
+
+    device = _get_device()
+    _tokenizer = AutoTokenizer.from_pretrained(_MODEL_NAME)
+    _model = AutoModel.from_pretrained(_MODEL_NAME).to(device)
+    _model.eval()
 
 
 def get_longformer_embedding(texts):
@@ -31,51 +64,48 @@ def get_longformer_embedding(texts):
             - Single embedding (torch.Tensor) if only one input text.
             - Batch embeddings (torch.Tensor) if multiple input texts.
     """
-    try:
-        # -------------------------
-        # 2. Input handling
-        # -------------------------
-        if isinstance(texts, str):
-            texts = [texts]
+    _init_model()
 
-        # -------------------------
-        # 3. Tokenization
-        # -------------------------
-        inputs = tokenizer(
-            texts,
-            padding=True,
-            truncation=True,
-            max_length=4096,
-            return_tensors="pt"
-        ).to(device)
+    # -------------------------
+    # 2. Input handling
+    # -------------------------
+    if isinstance(texts, str):
+        texts = [texts]
 
-        # -------------------------
-        # 4. Model forward pass
-        # -------------------------
-        with torch.no_grad():
-            outputs = model(**inputs)
-            last_hidden_state: torch.Tensor = outputs.last_hidden_state  # (batch, seq_len, hidden_dim)
+    # -------------------------
+    # 3. Tokenization
+    # -------------------------
+    device = _get_device()
+    inputs = _tokenizer(
+        texts,
+        padding=True,
+        truncation=True,
+        max_length=4096,
+        return_tensors="pt",
+    ).to(device)
 
-        # -------------------------
-        # 5. Mean pooling
-        # -------------------------
-        attention_mask: torch.Tensor = inputs["attention_mask"]
-        mask_expanded: torch.Tensor = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
-        sentence_embeddings: torch.Tensor = (last_hidden_state * mask_expanded).sum(1) / mask_expanded.sum(1)
+    # -------------------------
+    # 4. Model forward pass
+    # -------------------------
+    with torch.no_grad():
+        outputs = _model(**inputs)
+        last_hidden_state: torch.Tensor = outputs.last_hidden_state  # (batch, seq_len, hidden_dim)
 
-        # -------------------------
-        # 6. Return result (move to CPU for safety)
-        # -------------------------
-        sentence_embeddings = sentence_embeddings.cpu()
+    # -------------------------
+    # 5. Mean pooling
+    # -------------------------
+    attention_mask: torch.Tensor = inputs["attention_mask"]
+    mask_expanded: torch.Tensor = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+    sentence_embeddings: torch.Tensor = (last_hidden_state * mask_expanded).sum(1) / mask_expanded.sum(1)
 
-        if len(texts) == 1:
-            return sentence_embeddings[0]
-        else:
-            return sentence_embeddings
+    # -------------------------
+    # 6. Return result (move to CPU for safety)
+    # -------------------------
+    sentence_embeddings = sentence_embeddings.cpu()
 
-    except Exception as e:
-        print(f"Error generating Longformer embeddings: {e}")
-        return ""
+    if len(texts) == 1:
+        return sentence_embeddings[0]
+    return sentence_embeddings
 
 
 def parallel_embedding_task(data):

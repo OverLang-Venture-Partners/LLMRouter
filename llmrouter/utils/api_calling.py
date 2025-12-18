@@ -9,7 +9,11 @@ import os
 import json
 import time
 from typing import Dict, List, Union, Optional, Any
-from litellm import completion
+
+try:
+    from litellm import completion
+except ImportError:  # pragma: no cover
+    completion = None
 
 try:
     from transformers import GPT2TokenizerFast
@@ -173,6 +177,12 @@ def call_api(
         >>> requests = [request1, request2, request3]
         >>> results = call_api(requests)
     """
+    if completion is None:
+        raise ImportError(
+            "Missing optional dependency `litellm` required for API calls. "
+            "Install it with: `pip install litellm`."
+        )
+
     # Parse API keys from environment
     api_keys = _parse_api_keys(api_keys_env)
     
@@ -260,4 +270,3 @@ def call_api(
     
     # Return single result or list based on input
     return results[0] if is_single else results
-
