@@ -95,6 +95,30 @@ ROUTERS_REQUIRING_SPECIAL_ARGS = {
 UNSUPPORTED_ROUTERS = {}
 
 
+# ============================================================================
+# Plugin System Integration
+# ============================================================================
+# Automatically discover and register custom routers from plugin directories
+try:
+    from llmrouter.plugin_system import discover_and_register_plugins
+
+    # Discover plugins (verbose=False by default, set to True for debugging)
+    plugin_registry = discover_and_register_plugins(verbose=False)
+
+    # Register custom routers into ROUTER_REGISTRY
+    for router_name, router_class in plugin_registry.discovered_routers.items():
+        # Handle both (router, trainer) tuple and single router class
+        if isinstance(router_class, tuple):
+            ROUTER_REGISTRY[router_name] = router_class[0]  # Only router class for inference
+        else:
+            ROUTER_REGISTRY[router_name] = router_class
+
+except ImportError:
+    # Plugin system not available, continue without custom routers
+    pass
+# ============================================================================
+
+
 def load_router(router_name: str, config_path: str, load_model_path: Optional[str] = None):
     """
     Load a router instance based on router name and config.

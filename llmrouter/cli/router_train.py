@@ -83,6 +83,33 @@ for _name in _optional_missing:
     )
 
 
+# ============================================================================
+# Plugin System Integration
+# ============================================================================
+# Automatically discover and register custom routers from plugin directories
+try:
+    from llmrouter.plugin_system import discover_and_register_plugins
+
+    # Discover plugins (verbose=False by default, set to True for debugging)
+    plugin_registry = discover_and_register_plugins(verbose=False)
+
+    # Register custom routers into ROUTER_TRAINER_REGISTRY
+    for router_name, (router_class, trainer_class) in plugin_registry.discovered_routers.items():
+        if trainer_class is not None:
+            # Router has a trainer, add to training registry
+            ROUTER_TRAINER_REGISTRY[router_name] = (router_class, trainer_class)
+        else:
+            # Router has no trainer, mark as unsupported for training
+            UNSUPPORTED_ROUTERS[router_name] = (
+                "Custom router does not have a trainer implementation"
+            )
+
+except ImportError:
+    # Plugin system not available, continue without custom routers
+    pass
+# ============================================================================
+
+
 def get_device(device_arg: Optional[str] = None) -> str:
     """
     Determine the device to use for training.
