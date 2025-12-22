@@ -12,11 +12,13 @@ import re
 import yaml
 import json
 import pandas as pd
-from typing import Any, Dict, Tuple
+import copy
+from typing import Any, Dict, List, Tuple, Optional
 
 import torch.nn as nn
 
 from llmrouter.models.meta_router import MetaRouter
+from llmrouter.utils import call_api, generate_task_query, calculate_task_performance
 from .model import AutomixModel
 from .methods import Threshold, POMDP, SelfConsistency
 from .data_pipeline import prepare_automix_data
@@ -435,105 +437,135 @@ class AutomixRouter(MetaRouter):
     # ------------------------------------------------------------------
     # MetaRouter interface
     # ------------------------------------------------------------------
-    def route_batch(self, batch: Dict[str, Any] = None) -> Dict[str, Any]:
+    def route_batch(self, batch: Optional[Any] = None, task_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Route a batch of queries with full Automix inference pipeline.
+        Route a batch of queries with full Automix inference pipeline and execute them.
 
-        Process for each query:
-        1. Call small model to get answer
-        2. Perform self-verification
-        3. Based on verification score, decide whether to call large model
-        4. Return final answers and routing decisions
+        This method performs end-to-end processing:
+        1. Calls small model for initial answer
+        2. Performs self-verification
+        3. Routes to large model if verification confidence is low
+        4. Applies task-specific prompt formatting if task_name is provided
+        5. Calculates performance metrics if ground truth is available
 
         Args:
-            batch (dict, optional): Batch data. Should contain 'queries' list.
-                                   If None, uses test_df.
+            batch (Any, optional):
+                If provided, routes the provided batch. If None, uses self.query_data_test from loaded data.
+            task_name (str, optional):
+                Task name for prompt formatting (e.g., "mmlu", "gsm8k", "commonsense_qa").
 
         Returns:
-            dict: Routing results with model_names, responses, and routing decisions
+            list of dict:
+                A list of query dictionaries with response, tokens, and performance metrics.
         """
         from .data_pipeline import prepare_row, run_solver_job, run_verification, compute_fraction_correct
 
-        # Handle input
-        if batch is None:
-            # Use test data if available
-            if hasattr(self, 'test_df') and not self.test_df.empty:
-                query_df = self.test_df.copy()
-            else:
-                raise ValueError("No batch provided and no test data available")
-        elif isinstance(batch, dict):
-            if 'queries' in batch:
-                # List of query strings
-                query_df = pd.DataFrame([{'query': q} for q in batch['queries']])
-            elif 'data' in batch:
-                # DataFrame already provided
-                query_df = batch['data'] if isinstance(batch['data'], pd.DataFrame) else pd.DataFrame(batch['data'])
-            else:
-                raise ValueError("Batch must contain 'queries' list or 'data' DataFrame")
+        # Determine which data to use
+        if batch is not None:
+            query_data = batch if isinstance(batch, list) else [batch]
         else:
-            raise ValueError("Batch must be a dict or None")
+            if hasattr(self, "query_data_test") and self.query_data_test is not None:
+                query_data = copy.copy(self.query_data_test)
+            else:
+                print("Warning: No batch provided and no test data available for batch routing.")
+                return []
 
-        # Step 1: Call small model for all queries
-        results_slm = run_solver_job(
-            query_df, prepare_row, self.engine_small,
-            max_workers=self.cfg.get('hparam', {}).get('max_workers', 5)
-        )
-        query_df['slm_pred_ans'] = results_slm
+        # Get API endpoint from config
+        api_endpoint = self.cfg.get("api_endpoint", "https://integrate.api.nvidia.com/v1")
 
-        # Step 2: Self-verification on small model answers
-        ver_results = run_verification(
-            query_df,
-            ans_col='slm_pred_ans',
-            engine_name=self.engine_small,
-            temperature=1.0,
-            n=2,
-            stop="---",
-            max_tokens=250,
-            max_workers=self.cfg.get('hparam', {}).get('max_workers', 5),
-        )
+        query_data_output = []
+        for row in query_data:
+            # Handle both dict and non-dict inputs
+            if isinstance(row, dict):
+                row_copy = copy.copy(row)
+                original_query = row_copy.get("query", "")
+                row_task_name = row_copy.get("task_name", task_name)
+            else:
+                row_copy = {"query": str(row)}
+                original_query = str(row)
+                row_task_name = task_name
 
-        query_df['slm_ver'] = ver_results
-        query_df[self.verifier_column] = query_df['slm_ver'].apply(compute_fraction_correct)
-
-        # Step 3: Make routing decisions
-        decision_df = query_df[[self.verifier_column]].copy()
-        decision_df[self.slm_column] = 0.0  # Placeholder
-        decision_df[self.llm_column] = 0.0  # Placeholder
-
-        batch_dict = {"data": decision_df, "mode": "infer"}
-        outputs = self.model(batch_dict)
-        decisions = outputs["decisions"].cpu().numpy()
-
-        # Step 4: Call large model for queries that need it
-        queries_needing_llm = query_df[decisions]
-        if len(queries_needing_llm) > 0:
-            results_llm = run_solver_job(
-                queries_needing_llm, prepare_row, self.engine_large,
-                max_workers=self.cfg.get('hparam', {}).get('max_workers', 5)
+            # Step 1: Automix routing - call small model first
+            query_df = pd.DataFrame([{'query': original_query}])
+            results_slm = run_solver_job(
+                query_df, prepare_row, self.engine_small,
+                max_workers=self.cfg.get('hparam', {}).get('max_workers', 1)
             )
-            query_df.loc[decisions, 'llm_pred_ans'] = results_llm
+            slm_answer = results_slm[0] if results_slm else ""
+            query_df['slm_pred_ans'] = slm_answer
 
-        # Step 5: Select final answers and model names
-        query_df['final_answer'] = query_df.apply(
-            lambda row: row.get('llm_pred_ans', row['slm_pred_ans'])
-            if decisions[row.name] else row['slm_pred_ans'],
-            axis=1
-        )
-        query_df['model_name'] = [
-            self.engine_large if dec else self.engine_small
-            for dec in decisions
-        ]
+            # Step 2: Self-verification
+            ver_results = run_verification(
+                query_df,
+                ans_col='slm_pred_ans',
+                engine_name=self.engine_small,
+                temperature=1.0,
+                n=2,
+                stop="---",
+                max_tokens=250,
+                max_workers=1,
+            )
+            verification_score = compute_fraction_correct(ver_results[0]) if ver_results else 0.0
 
-        return {
-            "queries": query_df['query'].tolist(),
-            "model_names": query_df['model_name'].tolist(),
-            "responses": query_df['final_answer'].tolist(),
-            "decisions": decisions.tolist(),
-            "verification_scores": query_df[self.verifier_column].tolist(),
-            "slm_answers": query_df['slm_pred_ans'].tolist(),
-            "total": len(query_df),
-            "num_routed_to_llm": int(decisions.sum()),
-        }
+            # Step 3: Make routing decision
+            decision_df = pd.DataFrame([{self.verifier_column: verification_score}])
+            decision_df[self.slm_column] = 0.0
+            decision_df[self.llm_column] = 0.0
+            batch_dict = {"data": decision_df, "mode": "infer"}
+            outputs = self.model(batch_dict)
+            route_to_llm = bool(outputs["decisions"].item())
+
+            # Step 4: Route to large model if needed
+            if route_to_llm:
+                results_llm = run_solver_job(query_df, prepare_row, self.engine_large, max_workers=1)
+                response = results_llm[0] if results_llm else slm_answer
+                model_name = self.engine_large
+            else:
+                response = slm_answer
+                model_name = self.engine_small
+
+            row_copy["model_name"] = model_name
+
+            # Step 5: Format query if task_name is provided (for evaluation purposes)
+            if row_task_name:
+                try:
+                    sample_data = {
+                        "query": original_query,
+                        "choices": row_copy.get("choices", None) if isinstance(row_copy, dict) else None
+                    }
+                    formatted_query = generate_task_query(row_task_name, sample_data)
+                    row_copy["formatted_query"] = formatted_query
+                except (ValueError, KeyError) as e:
+                    print(f"Warning: Failed to format query with task '{row_task_name}': {e}. Using original query.")
+
+            # Note: Automix uses its own API calling mechanism through data_pipeline,
+            # so we don't call call_api here. Token counts are not available from data_pipeline.
+            row_copy["response"] = response
+            row_copy["prompt_tokens"] = 0  # Token counting not available
+            row_copy["completion_tokens"] = 0
+            row_copy["input_token"] = 0
+            row_copy["output_token"] = 0
+            row_copy["success"] = bool(response)
+            row_copy["verification_score"] = verification_score
+            row_copy["route_to_llm"] = route_to_llm
+            row_copy["slm_answer"] = slm_answer
+
+            # Step 6: Calculate task performance if ground truth is available
+            ground_truth = row_copy.get("ground_truth") or row_copy.get("gt") or row_copy.get("answer")
+            metric = row_copy.get("metric")
+            if ground_truth:
+                task_performance = calculate_task_performance(
+                    prediction=response,
+                    ground_truth=ground_truth,
+                    task_name=row_task_name,
+                    metric=metric
+                )
+                if task_performance is not None:
+                    row_copy["task_performance"] = task_performance
+
+            query_data_output.append(row_copy)
+
+        return query_data_output
 
     def route_single(self, sample: Any) -> Dict[str, Any]:
         """
