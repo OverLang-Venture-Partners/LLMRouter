@@ -101,25 +101,27 @@ Let's think step by step.
         # Note: API keys are handled via environment variable API_KEYS in call_api()
         self.api_endpoint = self.cfg.get("api_endpoint", "https://integrate.api.nvidia.com/v1")
 
-    def route_single(self, query: Dict[str, Any]) -> Dict[str, Any]:
+    def route_single(self, query):
         """
         Route a single query through the full pipeline: decompose+route → execute → aggregate.
-        
+
         This method performs end-to-end processing:
         1. Decomposes the initial query into sub-queries and routes each using LLM (in one step)
         2. Executes each sub-query with the routed model
         3. Aggregates all responses into a final answer
 
         Args:
-            query (dict):
-                A single query dictionary. Must contain the key:
-                    - "query": textual input to be processed.
-                Optional keys:
-                    - "task_name": Task name for prompt selection during aggregation
+            query (str or dict):
+                For chat mode (simple interaction):
+                    - str: The query text. Returns only the response string.
+                For evaluation mode (with metrics):
+                    - dict: Must contain "query" key, optional "task_name", "ground_truth", "metric".
+                      Returns full dict with response, tokens, and performance metrics.
 
         Returns:
-            dict:
-                Updated query dictionary containing:
+            str (chat mode) or dict (evaluation mode):
+                Chat mode: Returns the final response string directly.
+                Evaluation mode: Returns dict containing:
                     - "query": original query text
                     - "response": final aggregated answer
                     - "prompt_tokens": total prompt tokens used
@@ -129,8 +131,19 @@ Let's think step by step.
                     - "task_performance": evaluation score (0.0-1.0) if ground truth available
                     - "success": whether the pipeline succeeded
         """
-        original_query = query.get("query", "")
-        task_name = query.get("task_name", None)
+        # Handle both string (chat mode) and dict (evaluation mode)
+        if isinstance(query, str):
+            # Chat mode: simple query string, return response only
+            original_query = query
+            task_name = None
+            chat_mode = True
+            query_dict = {"query": original_query}
+        else:
+            # Evaluation mode: full dict with metrics
+            original_query = query.get("query", "")
+            task_name = query.get("task_name", None)
+            chat_mode = False
+            query_dict = query
         
         # Step 1: Decompose query into sub-queries and route each (in one LLM call)
         sub_query_routes = self._decompose_and_route(original_query)
@@ -144,23 +157,28 @@ Let's think step by step.
         
         # Step 3: Aggregate responses into final answer
         final_answer = self._aggregate_responses(original_query, sub_queries, sub_responses, task_name)
-        
+
+        # Chat mode: return response string only
+        if chat_mode:
+            return final_answer
+
+        # Evaluation mode: return full dict with metrics
         # Calculate token counts
         prompt_tokens = sum(r.get("prompt_tokens", 0) for r in sub_responses)
         completion_tokens = sum(r.get("completion_tokens", 0) for r in sub_responses)
-        
+
         # Calculate task performance if ground truth is available
-        ground_truth = query.get("ground_truth") or query.get("gt") or query.get("answer")
-        metric = query.get("metric")
+        ground_truth = query_dict.get("ground_truth") or query_dict.get("gt") or query_dict.get("answer")
+        metric = query_dict.get("metric")
         task_performance = calculate_task_performance(
             prediction=final_answer,
             ground_truth=ground_truth,
             task_name=task_name,
             metric=metric
         )
-        
-        # Return final result
-        query_output = copy.copy(query)
+
+        # Return final result with full metrics
+        query_output = copy.copy(query_dict)
         query_output["response"] = final_answer
         query_output["prompt_tokens"] = prompt_tokens
         query_output["completion_tokens"] = completion_tokens
