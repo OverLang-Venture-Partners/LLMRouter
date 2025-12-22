@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 import torch.nn as nn
 
 from llmrouter.models.meta_router import MetaRouter
+from llmrouter.utils import call_api, generate_task_query, calculate_task_performance
 import copy
 
 def parse_size(size_str: str) -> float:
@@ -113,24 +114,25 @@ class LargestLLM(MetaRouter):
         return query_output
 
 
-    def route_batch(self, batch: Optional[Any] = None) -> List[Dict[str, Any]]:
+    def route_batch(self, batch: Optional[Any] = None, task_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Select the largest LLM (by size) whose size string ends with 'B'.
+        Select the largest LLM and execute queries with it.
 
-        This method ignores the input batch and purely relies on
-        `self.llm_data`, which should be attached by DataLoader during
-        MetaRouter initialization.
+        This method performs end-to-end processing:
+        1. Selects the largest model based on size
+        2. Applies task-specific prompt formatting if task_name is provided
+        3. Calls the model via API to get response
+        4. Calculates performance metrics if ground truth is available
 
         Args:
             batch (Any, optional):
-                Unused input. Kept for interface compatibility.
+                If provided, routes the provided batch. If None, uses self.query_data_test from loaded data.
+            task_name (str, optional):
+                Task name for prompt formatting (e.g., "mmlu", "gsm8k", "commonsense_qa").
 
         Returns:
-            dict:
-                A dictionary containing:
-                    - "model_name": name of the selected model
-                    - "model_size": size string of the selected model
-                    - "model_info": full metadata entry from `self.llm_data`
+            list of dict:
+                A list of query dictionaries with response, tokens, and performance metrics.
         """
         if not hasattr(self, "llm_data") or not self.llm_data:
             raise ValueError(
@@ -157,9 +159,96 @@ class LargestLLM(MetaRouter):
             key=lambda k: parse_size(self.llm_data[k].get("size", "0B")),
         )
 
-        query_data_output = copy.copy(self.query_data_test)
-        for row in query_data_output:
-            row["model_name"]=largest_model_name
+        # Determine which data to use
+        if batch is not None:
+            query_data = batch if isinstance(batch, list) else [batch]
+        else:
+            if hasattr(self, "query_data_test") and self.query_data_test is not None:
+                query_data = copy.copy(self.query_data_test)
+            else:
+                print("Warning: No batch provided and no test data available for batch routing.")
+                return []
 
+        # Get API endpoint from config
+        api_endpoint = self.cfg.get("api_endpoint", "https://integrate.api.nvidia.com/v1")
+
+        query_data_output = []
+        for row in query_data:
+            # Handle both dict and non-dict inputs
+            if isinstance(row, dict):
+                row_copy = copy.copy(row)
+                original_query = row_copy.get("query", "")
+                row_task_name = row_copy.get("task_name", task_name)
+            else:
+                row_copy = {"query": str(row)}
+                original_query = str(row)
+                row_task_name = task_name
+
+            # Step 1: Route - always use largest model
+            model_name = largest_model_name
+            row_copy["model_name"] = model_name
+
+            # Step 2: Format query if task_name is provided
+            if row_task_name:
+                try:
+                    sample_data = {
+                        "query": original_query,
+                        "choices": row_copy.get("choices", None) if isinstance(row_copy, dict) else None
+                    }
+                    formatted_query = generate_task_query(row_task_name, sample_data)
+                    row_copy["formatted_query"] = formatted_query
+                    query_text_for_execution = formatted_query
+                except (ValueError, KeyError) as e:
+                    print(f"Warning: Failed to format query with task '{row_task_name}': {e}. Using original query.")
+                    query_text_for_execution = original_query
+            else:
+                query_text_for_execution = original_query
+
+            # Step 3: Call API to get response
+            api_model_name = model_name
+            if hasattr(self, 'llm_data') and self.llm_data and model_name in self.llm_data:
+                api_model_name = self.llm_data[model_name].get("model", model_name)
+
+            request = {
+                "api_endpoint": api_endpoint,
+                "query": query_text_for_execution,
+                "model_name": model_name,
+                "api_name": api_model_name
+            }
+
+            try:
+                result = call_api(request, max_tokens=1024, temperature=0.7)
+                response = result.get("response", "")
+                prompt_tokens = result.get("prompt_tokens", 0)
+                completion_tokens = result.get("completion_tokens", 0)
+                success = "error" not in result
+            except Exception as e:
+                print(f"Error calling API for query: {e}")
+                response = ""
+                prompt_tokens = 0
+                completion_tokens = 0
+                success = False
+
+            row_copy["response"] = response
+            row_copy["prompt_tokens"] = prompt_tokens
+            row_copy["completion_tokens"] = completion_tokens
+            row_copy["input_token"] = prompt_tokens
+            row_copy["output_token"] = completion_tokens
+            row_copy["success"] = success
+
+            # Step 4: Calculate task performance if ground truth is available
+            ground_truth = row_copy.get("ground_truth") or row_copy.get("gt") or row_copy.get("answer")
+            metric = row_copy.get("metric")
+            if ground_truth:
+                task_performance = calculate_task_performance(
+                    prediction=response,
+                    ground_truth=ground_truth,
+                    task_name=row_task_name,
+                    metric=metric
+                )
+                if task_performance is not None:
+                    row_copy["task_performance"] = task_performance
+
+            query_data_output.append(row_copy)
 
         return query_data_output

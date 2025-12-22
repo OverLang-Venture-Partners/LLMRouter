@@ -380,8 +380,9 @@ if RouterR1 is not None:
     ROUTER_REGISTRY["router_r1"] = RouterR1
     ROUTER_REGISTRY["router-r1"] = RouterR1
 
-# Routers that have answer_query method (full pipeline)
-ROUTERS_WITH_ANSWER_QUERY = {
+# Multi-round routers that have full pipeline in route_single
+# These routers return response directly from route_single
+MULTI_ROUND_ROUTERS = {
     "llmmultiroundrouter",
     "knnmultiroundrouter",
 }
@@ -632,16 +633,19 @@ def predict(
      
     # Prepare query based on mode
     query_for_router = prepare_query_by_mode(message, history_pairs, mode, top_k)
-    
-    # Check if router has answer_query method (full pipeline)
-    if router_name_lower in ROUTERS_WITH_ANSWER_QUERY and hasattr(router_instance, "answer_query"):
-        # Use full pipeline: decompose + route + execute + aggregate
-        # For multi-round routers, we still use the prepared query
+
+    # Check if router is a multi-round router (full pipeline in route_single)
+    if router_name_lower in MULTI_ROUND_ROUTERS:
+        # Multi-round routers do full pipeline: decompose + route + execute + aggregate
+        # For chat mode, just pass the query string and get response back
         try:
-            final_answer = router_instance.answer_query(query_for_router, return_intermediate=False)
-            return final_answer
+            # Call route_single with simple query string for chat interaction
+            result = router_instance.route_single(query_for_router)
+            # Multi-round routers return response directly
+            return result
         except Exception as e:
-            return f"Error: {str(e)}"
+            import traceback
+            return f"Error: {str(e)}\n{traceback.format_exc()}"
     
     # Handle RouterR1 specially (requires model_id, api_base, api_key)
     if router_name_lower in ROUTERS_REQUIRING_SPECIAL_ARGS:
