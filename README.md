@@ -46,6 +46,10 @@
 |--------|:--------:|:---------:|-------------|:--------:|
 | `router_r1` | [LINK](https://github.com/ulab-uiuc/Router-R1) | ✅ | Pre-trained Router-R1 model for multi-turn conversations | [📖](llmrouter/models/router_r1/README.md) |
 
+### Personalized Routers
+| Router | Training | Inference | Description | Tutorial |
+|--------|:--------:|:---------:|-------------|:--------:|
+| `gmtrouter` | ✅ | ✅ | Graph-based personalized router with user preference learning | [📖](llmrouter/models/gmtrouter/README.md) |
 
 ### Agentic Routers
 | Router | Training | Inference | Description | Tutorial |

@@ -26,6 +26,7 @@ from llmrouter.models import (
     CausalLMRouter,
     SmallestLLM,
     LargestLLM,
+    GMTRouter,
 )
 from llmrouter.models.llmmultiroundrouter import LLMMultiRoundRouter
 from llmrouter.models.knnmultiroundrouter import KNNMultiRoundRouter
@@ -380,6 +381,11 @@ if RouterR1 is not None:
     ROUTER_REGISTRY["router_r1"] = RouterR1
     ROUTER_REGISTRY["router-r1"] = RouterR1
 
+# Add GMTRouter if available
+if GMTRouter is not None:
+    ROUTER_REGISTRY["gmtrouter"] = GMTRouter
+    ROUTER_REGISTRY["gmt_router"] = GMTRouter
+
 # Multi-round routers that have full pipeline in route_single
 # These routers return response directly from route_single
 MULTI_ROUND_ROUTERS = {
@@ -392,6 +398,13 @@ MULTI_ROUND_ROUTERS = {
 ROUTERS_REQUIRING_SPECIAL_ARGS = {
     "router_r1",
     "router-r1",
+}
+
+# Routers that benefit from conversation history (multi-turn context)
+# These routers receive conversation_history in route_single for personalization
+ROUTERS_WITH_CONVERSATION_HISTORY = {
+    "gmtrouter",
+    "gmt_router",
 }
 
 # Routers that are not supported for chat interface
@@ -669,6 +682,30 @@ def predict(
     try:
         # Route the query - use the prepared query based on mode
         query_input = {"query": query_for_router}
+
+        # For GMTRouter, add conversation history for multi-turn personalization
+        if router_name_lower in ROUTERS_WITH_CONVERSATION_HISTORY:
+            # Convert history to conversation_history format
+            conversation_history = []
+            for user_msg, assistant_msg in history_pairs:
+                conversation_history.append({
+                    "role": "user",
+                    "content": user_msg
+                })
+                if assistant_msg:  # May be None for last turn
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": assistant_msg
+                    })
+
+            query_input.update({
+                "query_text": message,  # Original message
+                "user_id": "chat_user",  # Default chat user (could be customized)
+                "session_id": "chat_session",
+                "turn": len(history_pairs) + 1,
+                "conversation_history": conversation_history
+            })
+
         routing_result = router_instance.route_single(query_input)
         
         # Extract model name from routing result
