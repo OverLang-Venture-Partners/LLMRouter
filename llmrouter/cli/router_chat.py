@@ -26,6 +26,7 @@ from llmrouter.models import (
     CausalLMRouter,
     SmallestLLM,
     LargestLLM,
+    GMTRouter,
 )
 from llmrouter.models.llmmultiroundrouter import LLMMultiRoundRouter
 from llmrouter.models.knnmultiroundrouter import KNNMultiRoundRouter
@@ -379,6 +380,11 @@ if CausalLMRouter is not None:
 if RouterR1 is not None:
     ROUTER_REGISTRY["router_r1"] = RouterR1
     ROUTER_REGISTRY["router-r1"] = RouterR1
+
+# Add GMTRouter if available
+if GMTRouter is not None:
+    ROUTER_REGISTRY["gmtrouter"] = GMTRouter
+    ROUTER_REGISTRY["gmt_router"] = GMTRouter
 
 # Multi-round routers that have full pipeline in route_single
 # These routers return response directly from route_single
