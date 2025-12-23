@@ -26,32 +26,32 @@
 ## Supported Routers
 
 ### Single-Round Routers
-| Router | Training | Inference | Description |
-|--------|:--------:|:---------:|-------------|
-| `knnrouter` | ✅ | ✅ | K-Nearest Neighbors based routing |
-| `svmrouter` | ✅ | ✅ | Support Vector Machine based routing |
-| `mlprouter` | ✅ | ✅ | Multi-Layer Perceptron based routing |
-| `mfrouter` | ✅ | ✅ | Matrix Factorization based routing |
-| `elorouter` | N/A | ✅ | Elo Rating based routing |
-| `routerdc` | ✅ | ✅ | Dual Contrastive learning based routing |
-| `automix` | N/A | ✅ | Automatic model mixing |
-| `hybrid_llm` | ✅ | ✅ | Hybrid LLM routing strategy |
-| `graphrouter` | ✅ | ✅ | Graph-based routing |
-| `causallm_router` | ✅ | ✅ | Causal Language Model router |
-| `smallest_llm` | N/A | ✅ | Always routes to smallest model |
-| `largest_llm` | N/A | ✅ | Always routes to largest model|
+| Router | Training | Inference | Description | Tutorial |
+|--------|:--------:|:---------:|-------------|:--------:|
+| `knnrouter` | ✅ | ✅ | K-Nearest Neighbors based routing | [📖](llmrouter/models/knnrouter/README.md) |
+| `svmrouter` | ✅ | ✅ | Support Vector Machine based routing | [📖](llmrouter/models/svmrouter/README.md) |
+| `mlprouter` | ✅ | ✅ | Multi-Layer Perceptron based routing | [📖](llmrouter/models/mlprouter/README.md) |
+| `mfrouter` | ✅ | ✅ | Matrix Factorization based routing | [📖](llmrouter/models/mfrouter/README.md) |
+| `elorouter` | N/A | ✅ | Elo Rating based routing | [📖](llmrouter/models/elorouter/README.md) |
+| `routerdc` | ✅ | ✅ | Dual Contrastive learning based routing | [📖](llmrouter/models/routerdc/README.md) |
+| `automix` | N/A | ✅ | Automatic model mixing | [📖](llmrouter/models/automix/README.md) |
+| `hybrid_llm` | ✅ | ✅ | Hybrid LLM routing strategy | [📖](llmrouter/models/hybrid_llm/README.md) |
+| `graphrouter` | ✅ | ✅ | Graph-based routing | [📖](llmrouter/models/graphrouter/README.md) |
+| `causallm_router` | ✅ | ✅ | Causal Language Model router | [📖](llmrouter/models/causallm_router/README.md) |
+| `smallest_llm` | N/A | ✅ | Always routes to smallest model | [📖](llmrouter/models/smallest_llm/README.md) |
+| `largest_llm` | N/A | ✅ | Always routes to largest model | [📖](llmrouter/models/largest_llm/README.md) |
 
 ### Multi-Round Routers
-| Router | Training | Inference | Description |
-|--------|:--------:|:---------:|-------------|
-| `router_r1` | [LINK](https://github.com/ulab-uiuc/Router-R1) | ✅ | Pre-trained Router-R1 model for multi-turn conversations |
+| Router | Training | Inference | Description | Tutorial |
+|--------|:--------:|:---------:|-------------|:--------:|
+| `router_r1` | [LINK](https://github.com/ulab-uiuc/Router-R1) | ✅ | Pre-trained Router-R1 model for multi-turn conversations | [📖](llmrouter/models/router_r1/README.md) |
 
 
 ### Agentic Routers
-| Router | Training | Inference | Description |
-|--------|:--------:|:---------:|-------------|
-| `knnmultiroundrouter` | ✅ | ✅ | KNN-based agentic router for complex tasks |
-| `llmmultiroundrouter` | N/A | ✅ | LLM-based agentic router for complex tasks |
+| Router | Training | Inference | Description | Tutorial |
+|--------|:--------:|:---------:|-------------|:--------:|
+| `knnmultiroundrouter` | ✅ | ✅ | KNN-based agentic router for complex tasks | [📖](llmrouter/models/knnmultiroundrouter/README.md) |
+| `llmmultiroundrouter` | N/A | ✅ | LLM-based agentic router for complex tasks | [📖](llmrouter/models/llmmultiroundrouter/README.md) |
 
 ## Get Started
 
@@ -303,6 +303,20 @@ def route_single(self, query_input):
             return {"model_name": model_name}
 ```
 
-## Star History
+<!-- ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ulab-uiuc/LLMRouter&type=date&legend=top-left)](https://www.star-history.com/#ulab-uiuc/LLMRouter&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=ulab-uiuc/LLMRouter&type=date&legend=top-left)](https://www.star-history.com/#ulab-uiuc/LLMRouter&type=date&legend=top-left) -->
+
+## Citation
+
+If you find LLMRouter useful for your research or projects, please cite it as:
+
+```bibtex
+@misc{llmrouter2025,
+  title        = {LLMRouter: An Open-Source Library for LLM Routing},
+  author       = {Tao Feng and Haozhen Zhang and Zijie Lei and Haodong Yue and Chongshan Lin and Jiaxuan You},
+  year         = {2025},
+  howpublished = {\url{https://github.com/ulab-uiuc/LLMRouter}},
+  note         = {GitHub repository}
+}
+```
