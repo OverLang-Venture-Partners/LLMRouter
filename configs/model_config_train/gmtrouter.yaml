@@ -1,62 +1,137 @@
-# Config parameters for GMTRouter (Graph-based Multi-Turn Router) training:
+# GMTRouter Training Configuration
+# Based on: https://github.com/ulab-uiuc/GMTRouter
+#
+# IMPORTANT: For actual training, please use the original GMTRouter repository
+# This config is for reference and inference integration with LLMRouter
 
+# Dataset configuration
+dataset:
+  name: mt_bench                    # Dataset: chatbot_arena, gsm8k, mmlu, mt_bench
+  path: ./data                      # Path to data root (download from Google Drive)
 
-data_path:
-  query_data_train: 'data/example_data/query_data/default_query_train.jsonl'
-  query_data_test: 'data/example_data/query_data/default_query_test.jsonl'
-  query_embedding_data: 'data/example_data/routing_data/query_embeddings_longformer.pt'
-  routing_data_train: 'data/example_data/routing_data/default_routing_train_data.jsonl'
-  routing_data_test: 'data/example_data/routing_data/default_routing_test_data.jsonl'
-  llm_data: 'data/example_data/llm_candidates/default_llm.json'
-  llm_embedding_data: 'data/example_data/llm_candidates/default_llm_embeddings.json'
+# Data preprocessing
+config:
+  preprocess: true                  # Whether to preprocess JSONL to .pt format
 
-model_path:
-  ini_model_path: ''
-  save_model_path: 'saved_models/gmtrouter/gmtrouter.pt'
-  load_model_path: 'saved_models/gmtrouter/gmtrouter.pt'
-  user_embeddings_path: 'saved_models/gmtrouter/user_embeddings.pt'
+# Training configuration
+train:
+  id: llmrouter_gmt                 # Experiment identifier
+  epochs: 350                       # Number of training epochs
+  lr: 5e-4                          # Learning rate (5e-4 recommended)
+  record_per_user: 10               # Minimum interactions per user
+  prediction_count: 256             # Number of predictions per batch
+  multi_turn: false                 # Enable multi-turn conversation mode
+  aggregation_type: mean            # Aggregation: mean, max, attention
+  objective: auc                    # Objective: auc or accuracy
+  binary: true                      # Binary classification (pairwise comparison)
+  eval_every: 5                     # Evaluate every N epochs
+  seed: 136                         # Random seed for reproducibility
 
-metric:
-  weights:
-    performance: 1
-    cost: 0
-    llm_judge: 0
+# Checkpoint configuration
+checkpoint:
+  root: ./models                    # Checkpoint save directory
+  save_every: 25                    # Save checkpoint every N epochs
 
-# GMTRouter-specific configuration
+# GMTRouter-specific model configuration
 gmt_config:
-  # Personalization settings
-  personalization: true             # Enable user preference learning
-  context_window: 5                 # Number of previous turns to consider
-
-  # GNN architecture
-  hidden_dim: 128                   # Hidden layer dimension for GNN
-  num_layers: 3                     # Number of GNN layers
+  # Graph neural network architecture
+  num_gnn_layers: 2                 # Number of HGT (Heterogeneous Graph Transformer) layers
+                                    # 2 for single-turn, 3 for multi-turn
+  hidden_dim: 128                   # Hidden dimension for GNN embeddings
   dropout: 0.1                      # Dropout rate for regularization
 
-  # User embedding settings
-  user_embedding_dim: 64            # Dimension of user preference embeddings
-  update_user_embeddings: true      # Update user embeddings during training
+  # Personalization
+  personalization: true             # Enable user preference learning
+  record_per_user: 10               # Minimum records per user to learn preferences
 
-  # Graph construction
-  num_neighbors: 10                 # Number of neighbors for graph construction
-  edge_threshold: 0.5               # Similarity threshold for edge creation
+  # Node types (fixed in GMTRouter architecture)
+  # - User: User preference embeddings (learned)
+  # - Session: Conversation session representations (learned)
+  # - Query: Query text embeddings (from PLM)
+  # - LLM: Model embeddings (from PLM)
+  # - Response: Response quality (rating-based)
 
-hparam:
-  # Training parameters
-  learning_rate: 0.001              # Learning rate for optimizer
-  weight_decay: 0.0001              # L2 regularization weight decay
-  train_epoch: 100                  # Number of training epochs
-  batch_size: 32                    # Batch size for training
+  # Edge types: 21 types in HeteroEdges enum
+  # Including: own, owned_by, answered_by, answered_to, next, prev, etc.
 
-  # Early stopping
-  patience: 10                      # Early stopping patience
+# Data paths (for LLMRouter integration)
+data_path:
+  data_root: ./data                 # Root directory for GMTRouter data
+  training_set: ./data/mt_bench/training_set.jsonl
+  valid_set: ./data/mt_bench/valid_set.jsonl
+  test_set: ./data/mt_bench/test_set.jsonl
 
-  # Data split
-  val_split_ratio: 0.2              # Ratio of training data used for validation
+# Model paths
+model_path:
+  checkpoint_root: ./models
+  save_model_path: ./models/gmtrouter_checkpoint.pt
+  load_model_path: ./models/gmtrouter_checkpoint.pt
 
-  # Reproducibility
-  random_state: 42                  # Random seed for reproducibility
+# Data Download Instructions:
+# ===========================
+# 1. Download GMTRouter dataset from Google Drive
+#    Link: https://drive.google.com/file/d/[GMTRouter_dataset_id]
+#
+# 2. Extract the archive:
+#    tar -xzvf GMTRouter_dataset.tar.gz
+#
+# 3. Move data folder to repository root:
+#    mv data ./
+#
+# 4. Data structure:
+#    ./data/
+#      ├── chatbot_arena/
+#      │   ├── training_set.jsonl
+#      │   ├── valid_set.jsonl
+#      │   └── test_set.jsonl
+#      ├── gsm8k/
+#      │   ├── training_set.jsonl
+#      │   ├── valid_set.jsonl
+#      │   └── test_set.jsonl
+#      ├── mmlu/
+#      │   └── ...
+#      └── mt_bench/
+#          └── ...
+#
+# Data Format (JSONL):
+# ====================
+# Each line is a JSON object with:
+# {
+#   "judge": "user_id",                           # User identifier
+#   "model": "gpt-4",                             # LLM model name
+#   "question_id": "12345",                       # Question identifier
+#   "turn": 1,                                    # Turn number
+#   "conversation": [
+#     {
+#       "query": "What is machine learning?",     # Query text
+#       "query_emb": [0.1, 0.2, ...],            # Query embedding vector
+#       "response": "Machine learning is...",     # Response text (optional)
+#       "rating": 4.5                             # Quality rating
+#     }
+#   ],
+#   "model_emb": [0.3, 0.4, ...],                # LLM embedding vector
+#   "encoder": "sentence-transformers/all-mpnet-base-v2"  # PLM model name
+# }
 
-  # Multi-turn specific
-  max_history_length: 10            # Maximum conversation history to store
-  history_decay: 0.9                # Decay factor for older conversation turns
+# Training Instructions:
+# ======================
+# For actual training, use the original GMTRouter repository:
+#
+# 1. Clone the repository:
+#    git clone https://github.com/ulab-uiuc/GMTRouter
+#    cd GMTRouter
+#
+# 2. Setup environment:
+#    conda create -n gmtrouter python=3.11.13
+#    conda activate gmtrouter
+#    pip install torch==2.6.* --index-url https://download.pytorch.org/whl/cu124
+#    pip install -r requirements.txt
+#    pip install torch-geometric==2.6.1
+#
+# 3. Download and prepare data (see above)
+#
+# 4. Run training:
+#    python src/train.py --config configs/sample.yaml
+#
+# 5. Copy trained checkpoint to LLMRouter:
+#    cp models/[checkpoint].pt [LLMRouter_path]/models/gmtrouter_checkpoint.pt

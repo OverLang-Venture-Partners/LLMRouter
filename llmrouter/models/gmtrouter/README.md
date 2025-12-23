@@ -1,358 +1,498 @@
 # GMTRouter - Graph-based Multi-Turn Personalized Router
 
+## ⚠️ Important Notice
+
+**GMTRouter uses a fundamentally different architecture and data format from other routers in LLMRouter.**
+
+- **Original Repository**: https://github.com/ulab-uiuc/GMTRouter
+- **For Training**: Please use the original GMTRouter repository
+- **In LLMRouter**: This integration provides inference capabilities only
+
 ## Overview
 
-GMTRouter is a graph neural network-based router designed specifically for multi-turn conversations with personalization capabilities. It leverages user interaction history and preferences to make routing decisions that adapt to individual users over time.
+GMTRouter is a personalized LLM router designed for multi-turn conversations. It uses **heterogeneous graph neural networks (HeteroGNN)** to learn user preferences and optimize model selection across conversation sessions.
 
-## Paper References
+### Key Differences from Other Routers
 
-- **Graph Neural Networks**: Kipf & Welling (2017) - "Semi-Supervised Classification with Graph Convolutional Networks"
-- **Personalized Recommendation**: Hamilton et al. (2017) - "Inductive Representation Learning on Large Graphs"
-- **Multi-Turn Dialogue**: Serban et al. (2016) - "Building End-To-End Dialogue Systems Using Generative Hierarchical Neural Network Models"
+| Aspect | GMTRouter | Other Routers (KNN, MLP, etc.) |
+|--------|-----------|-------------------------------|
+| **Architecture** | Heterogeneous GNN with 5 node types | Single model (classifier, ranker) |
+| **Data Format** | Special JSONL with embeddings & ratings | Standard query-response pairs |
+| **Learning** | Pairwise preference learning | Classification/ranking |
+| **Personalization** | Per-user preference embeddings | No personalization |
+| **Multi-turn** | Built-in conversation tracking | Single-turn or basic history |
+| **Graph Structure** | 21 edge types, 5 node types | No graph structure |
 
-## How It Works
+## Architecture
 
-GMTRouter employs a graph-based approach to model the relationships between:
-1. **Queries** and **LLM candidates** (query-model performance)
-2. **Users** and **LLM preferences** (personalization)
-3. **Conversation history** (multi-turn context)
+### Heterogeneous Graph Structure
 
-### Key Components
+GMTRouter models routing as a **heterogeneous graph** with 5 node types:
 
-#### 1. Graph Construction
-- Creates a heterogeneous graph with query, model, and user nodes
-- Edges represent:
-  - Query-Model: Historical performance relationships
-  - User-Model: User preference patterns
-  - Query-Query: Semantic similarity in conversation history
+1. **User Nodes**: Learned user preference embeddings (initialized as zeros, updated during training)
+2. **Session Nodes**: Conversation session representations (track multi-turn interactions)
+3. **Query Nodes**: Query embeddings from Pre-trained Language Models (PLMs)
+4. **LLM Nodes**: Model embeddings from PLMs
+5. **Response Nodes**: Response quality representations (rating-scaled)
 
-#### 2. Graph Neural Network
-- Multi-layer GNN processes the graph structure
-- Aggregates information from neighbors using message passing
-- Learns representations for queries, models, and users
+### 21 Edge Types
 
-#### 3. Personalization Layer
-- Maintains user-specific embeddings
-- Updates based on interaction history
-- Considers context window of recent conversations
+The graph includes 21 directed edge types modeling relationships:
 
-#### 4. Routing Decision
-- Combines current query embedding with:
-  - User preference embedding
-  - Conversation history context
-- Predicts best model for current query-user pair
+- **User-Session**: `own`, `owned_by`
+- **Query-Response**: `answered_by`, `answered_to`
+- **Temporal**: `next`, `prev` (for sessions and queries)
+- **LLM Relations**: `receive`, `generate`, `response_to`
+- And 13 more types...
 
-### Architecture Flow
+### Model Components
 
-```
-User Query + User ID + Conversation History
-          ↓
-   Query Embedding
-          ↓
-   Graph Construction (Query-Model-User)
-          ↓
-   Graph Neural Network
-          ↓
-   Personalization Layer
-          ↓
-   Model Selection (Personalized)
-```
+1. **HeteroGNN**: Uses HGT (Heterogeneous Graph Transformer) layers
+   - 2 layers for single-turn tasks
+   - 3 layers for multi-turn conversations
+   - Aggregates information across heterogeneous node types
 
-## Configuration Parameters
+2. **PreferencePredictor**: Cross-attention mechanism
+   - Scores LLM candidates based on user embeddings and query context
+   - Outputs preference scores for each model
 
-### Training Parameters
+## Data Format
 
-Located in `configs/model_config_train/gmtrouter.yaml`:
+### JSONL Structure
 
-#### GMTRouter-Specific Configuration (`gmt_config`)
+GMTRouter requires a **special JSONL format** (NOT standard LLMRouter format):
 
-- **`personalization`** (bool, default: `true`)
-  - Enable user preference learning
-  - When `true`, maintains user-specific embeddings
-  - When `false`, falls back to non-personalized routing
-
-- **`context_window`** (int, default: `5`)
-  - Number of previous conversation turns to consider
-  - Larger values = more conversation context
-  - Range: 1-20 (typically 3-10 works best)
-
-- **`hidden_dim`** (int, default: `128`)
-  - Hidden layer dimension for GNN
-  - Controls model capacity
-  - Range: 64-512 (larger = more expressive but slower)
-
-- **`num_layers`** (int, default: `3`)
-  - Number of GNN layers
-  - More layers = larger receptive field
-  - Range: 2-5 (too many can cause over-smoothing)
-
-- **`dropout`** (float, default: `0.1`)
-  - Dropout rate for regularization
-  - Prevents overfitting
-  - Range: 0.0-0.5
-
-- **`user_embedding_dim`** (int, default: `64`)
-  - Dimension of user preference embeddings
-  - Controls personalization capacity
-  - Range: 32-256
-
-- **`update_user_embeddings`** (bool, default: `true`)
-  - Whether to update user embeddings during training
-  - `true` for training, `false` for testing
-
-- **`num_neighbors`** (int, default: `10`)
-  - Number of neighbors for graph construction
-  - Controls graph density
-  - Range: 5-50
-
-- **`edge_threshold`** (float, default: `0.5`)
-  - Similarity threshold for edge creation
-  - Higher = sparser graph
-  - Range: 0.0-1.0
-
-#### General Training Parameters (`hparam`)
-
-- **`learning_rate`** (float, default: `0.001`)
-  - Learning rate for optimizer
-  - Range: 0.0001-0.01
-  - Lower for stable convergence, higher for faster training
-
-- **`weight_decay`** (float, default: `0.0001`)
-  - L2 regularization weight
-  - Prevents overfitting
-  - Range: 0.0-0.01
-
-- **`train_epoch`** (int, default: `100`)
-  - Maximum number of training epochs
-  - Training may stop earlier with early stopping
-
-- **`batch_size`** (int, default: `32`)
-  - Number of samples per gradient update
-  - Larger = more stable gradients but more memory
-  - Range: 8-128
-
-- **`patience`** (int, default: `10`)
-  - Early stopping patience (epochs)
-  - Stops if validation doesn't improve for this many epochs
-
-- **`val_split_ratio`** (float, default: `0.2`)
-  - Validation set size (20% of training data)
-  - Range: 0.1-0.3
-
-- **`max_history_length`** (int, default: `10`)
-  - Maximum conversation history to store per user
-  - Older turns are discarded
-  - Range: 5-50
-
-- **`history_decay`** (float, default: `0.9`)
-  - Decay factor for older conversation turns
-  - Exponential decay: older turns have less weight
-  - Range: 0.7-1.0 (1.0 = no decay)
-
-### Testing Parameters
-
-Located in `configs/model_config_test/gmtrouter.yaml`:
-
-Most parameters match training config for model compatibility. Key differences:
-- `update_user_embeddings`: Set to `false` (don't modify during inference)
-- Training-specific parameters (learning_rate, etc.) are present but unused
-
-## Usage
-
-### Training
-
-```python
-from llmrouter.models.gmtrouter import GMTRouter, GMTRouterTrainer
-
-# Initialize router with training config
-router = GMTRouter(yaml_path='configs/model_config_train/gmtrouter.yaml')
-
-# Create trainer
-trainer = GMTRouterTrainer(router=router)
-
-# Train the model
-results = trainer.train()
-print(f"Best validation accuracy: {results['best_val_acc']:.4f}")
+```json
+{
+  "judge": "user_001",
+  "model": "gpt-4",
+  "question_id": "12345",
+  "turn": 1,
+  "conversation": [
+    {
+      "query": "What is machine learning?",
+      "query_emb": [0.123, -0.456, 0.789, ...],
+      "response": "Machine learning is a subset of AI...",
+      "rating": 4.5
+    }
+  ],
+  "model_emb": [0.234, -0.567, 0.891, ...],
+  "encoder": "sentence-transformers/all-mpnet-base-v2"
+}
 ```
 
-### Inference (Single Query)
+### Field Descriptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `judge` | string | User identifier (e.g., "user_001") |
+| `model` | string | LLM model name (e.g., "gpt-4", "claude-2") |
+| `question_id` | string | Unique question/task identifier |
+| `turn` | int | Turn number in multi-turn conversation (1, 2, 3, ...) |
+| `conversation` | array | List of conversation turns (see below) |
+| `model_emb` | array | LLM embedding vector from PLM |
+| `encoder` | string | PLM model used for embeddings (optional) |
+
+### Conversation Turn Structure
+
+Each turn in the `conversation` array contains:
+
+```json
+{
+  "query": "Query text",
+  "query_emb": [0.1, 0.2, ...],    // Query embedding from PLM
+  "response": "Response text",      // Optional
+  "rating": 4.5                     // Quality score (0-5 or 0-1)
+}
+```
+
+## Data Preparation
+
+### Step 1: Download Dataset
+
+Download the GMTRouter dataset from Google Drive:
+
+```bash
+# Dataset link (check GMTRouter repository for latest link)
+# https://drive.google.com/file/d/[GMTRouter_dataset_id]
+
+# Download to your local machine
+wget "https://drive.google.com/uc?export=download&id=[dataset_id]" -O GMTRouter_dataset.tar.gz
+```
+
+### Step 2: Extract Data
+
+```bash
+# Extract the archive
+tar -xzvf GMTRouter_dataset.tar.gz
+
+# Move data folder to repository root
+mv data ./
+```
+
+### Step 3: Verify Data Structure
+
+After extraction, you should have:
+
+```
+./data/
+├── chatbot_arena/
+│   ├── training_set.jsonl
+│   ├── valid_set.jsonl
+│   └── test_set.jsonl
+├── gsm8k/
+│   ├── training_set.jsonl
+│   ├── valid_set.jsonl
+│   └── test_set.jsonl
+├── mmlu/
+│   ├── training_set.jsonl
+│   ├── valid_set.jsonl
+│   └── test_set.jsonl
+└── mt_bench/
+    ├── training_set.jsonl
+    ├── valid_set.jsonl
+    └── test_set.jsonl
+```
+
+### Supported Datasets
+
+- **chatbot_arena**: Real user preferences from Chatbot Arena
+- **gsm8k**: Grade school math problems
+- **mmlu**: Massive Multitask Language Understanding benchmark
+- **mt_bench**: Multi-turn conversation benchmark
+
+## Training GMTRouter
+
+### ⚠️ Use Original Repository for Training
+
+Training GMTRouter requires PyTorch Geometric and the original codebase:
+
+```bash
+# 1. Clone GMTRouter repository
+git clone https://github.com/ulab-uiuc/GMTRouter
+cd GMTRouter
+
+# 2. Create environment
+conda create -n gmtrouter python=3.11.13
+conda activate gmtrouter
+
+# 3. Install PyTorch with CUDA
+pip install torch==2.6.* --index-url https://download.pytorch.org/whl/cu124
+
+# 4. Install requirements
+pip install -r requirements.txt
+pip install torch-geometric==2.6.1
+
+# 5. Download and prepare data (see above)
+
+# 6. Run training
+python src/train.py --config configs/sample.yaml
+```
+
+### Training Configuration
+
+Edit `configs/sample.yaml`:
+
+```yaml
+dataset:
+  name: mt_bench          # Choose: chatbot_arena, gsm8k, mmlu, mt_bench
+  path: ./data
+
+train:
+  epochs: 350             # Training epochs
+  lr: 5e-4                # Learning rate
+  record_per_user: 10     # Min interactions per user
+  multi_turn: false       # Enable multi-turn mode
+  objective: auc          # Metric: auc or accuracy
+  eval_every: 5           # Validation frequency
+
+checkpoint:
+  root: ./models
+  save_every: 25          # Checkpoint frequency
+```
+
+### Transfer Model to LLMRouter
+
+After training, copy the checkpoint:
+
+```bash
+# Copy from GMTRouter to LLMRouter
+cp models/[your_checkpoint].pt [LLMRouter_path]/models/gmtrouter_checkpoint.pt
+```
+
+## Using GMTRouter in LLMRouter
+
+### Inference Setup
 
 ```python
 from llmrouter.models.gmtrouter import GMTRouter
 
-# Initialize router with test config
+# Initialize with test config
 router = GMTRouter(yaml_path='configs/model_config_test/gmtrouter.yaml')
+```
 
-# Route a query with user context
+### Single Query Routing
+
+```python
+# Route with user context
 query = {
     "query_text": "Explain quantum computing in simple terms",
-    "user_id": "user_123",  # Important for personalization
-    "task": "qa"
+    "user_id": "user_123",          # Required for personalization
+    "session_id": "session_456",    # Optional
+    "turn": 1,                       # Optional
+    "conversation_history": []       # Optional: previous turns
 }
 
-# Get routing decision
 result = router.route_single(query)
-print(f"Selected model: {result['model_name']}")
+print(result)
+# {
+#   "model_name": "gpt-4",
+#   "confidence": 0.87,
+#   "user_preference": 0.92,
+#   "reasoning": "Selected based on user user_123's learned preferences..."
+# }
 ```
 
 ### Multi-Turn Conversation
 
 ```python
-# Conversation with history tracking
-user_id = "user_456"
+user_id = "user_789"
+session_id = "session_123"
 
-queries = [
+conversation = [
     "What is machine learning?",
-    "How is it different from deep learning?",
+    "How does it differ from deep learning?",
     "Can you give me a practical example?"
 ]
 
-for i, query_text in enumerate(queries):
+for turn, query_text in enumerate(conversation, start=1):
     query = {
         "query_text": query_text,
         "user_id": user_id,
-        "task": "qa"
+        "session_id": session_id,
+        "turn": turn
     }
 
     result = router.route_single(query)
-    print(f"Turn {i+1}: {result['model_name']}")
-
-    # Conversation history is automatically tracked
-    # Each turn influences future routing decisions
+    print(f"Turn {turn}: {result['model_name']} (confidence: {result['confidence']:.2f})")
 ```
 
 ### Batch Routing
 
 ```python
-# Route multiple queries at once
 batch = [
-    {"query_text": "Calculate 123 * 456", "user_id": "user_789", "task": "math"},
-    {"query_text": "Write a poem about AI", "user_id": "user_789", "task": "creative"},
-    {"query_text": "Debug this Python code", "user_id": "user_789", "task": "code"}
+    {"query_text": "Solve 2+2", "user_id": "user_001"},
+    {"query_text": "Write a poem", "user_id": "user_001"},
+    {"query_text": "Debug this code", "user_id": "user_002"}
 ]
 
-results = router.route_batch(batch, task_name="mixed")
-for query, result in zip(batch, results):
-    print(f"{query['task']}: {result['model_name']}")
+results = router.route_batch(batch)
+for q, r in zip(batch, results):
+    print(f"{q['query_text']}: {r['model_name']}")
 ```
 
-## YAML Configuration Example
+### Update User Feedback
 
-### Training Configuration
-
-```yaml
-# configs/model_config_train/gmtrouter.yaml
-gmt_config:
-  personalization: true
-  context_window: 5
-  hidden_dim: 128
-  num_layers: 3
-  dropout: 0.1
-  user_embedding_dim: 64
-
-hparam:
-  learning_rate: 0.001
-  train_epoch: 100
-  batch_size: 32
-  patience: 10
+```python
+# Record user feedback to improve future routing
+router.update_user_feedback(
+    user_id="user_123",
+    query="What is AI?",
+    model="gpt-4",
+    rating=4.5  # User rating (0-5 scale)
+)
 ```
 
-### Testing Configuration
+## Configuration Parameters
 
-```yaml
-# configs/model_config_test/gmtrouter.yaml
-gmt_config:
-  personalization: true
-  context_window: 5
-  hidden_dim: 128
-  num_layers: 3
-  update_user_embeddings: false  # Don't update during inference
+### GMTRouter-Specific (`gmt_config`)
 
-hparam:
-  random_state: 42
-```
+- **`num_gnn_layers`** (int, default: `2`)
+  - Number of HGT layers in HeteroGNN
+  - Use 2 for single-turn, 3 for multi-turn
+  - Range: 2-4
+
+- **`hidden_dim`** (int, default: `128`)
+  - Hidden dimension for graph embeddings
+  - Range: 64-256
+
+- **`dropout`** (float, default: `0.1`)
+  - Dropout rate for regularization
+  - Range: 0.0-0.3
+
+- **`personalization`** (bool, default: `true`)
+  - Enable user preference learning
+  - Requires `user_id` in queries
+
+- **`record_per_user`** (int, default: `10`)
+  - Minimum interactions per user
+  - Users with fewer interactions use fallback routing
+
+- **`multi_turn`** (bool, default: `false`)
+  - Enable multi-turn conversation mode
+  - Increases GNN layers to 3
+
+- **`aggregation_type`** (string, default: `"mean"`)
+  - How to aggregate conversation history
+  - Options: `"mean"`, `"max"`, `"attention"`
+
+### Training Parameters (`train`)
+
+- **`epochs`** (int, default: `350`)
+  - Number of training epochs
+
+- **`lr`** (float, default: `5e-4`)
+  - Learning rate (5e-4 recommended)
+
+- **`prediction_count`** (int, default: `256`)
+  - Number of pairwise predictions per batch
+
+- **`objective`** (string, default: `"auc"`)
+  - Training objective: `"auc"` or `"accuracy"`
+
+- **`binary`** (bool, default: `true`)
+  - Use pairwise comparison (binary classification)
+
+- **`eval_every`** (int, default: `5`)
+  - Validation frequency (epochs)
 
 ## Advantages
 
-1. **Personalization**: Adapts to individual user preferences over time
-2. **Multi-Turn Awareness**: Considers conversation history for context-aware routing
-3. **Graph-Based**: Captures complex relationships between queries, models, and users
-4. **Scalable**: Efficient graph operations handle large-scale routing
-5. **Adaptive**: User embeddings evolve with interaction patterns
-6. **Contextual**: Uses conversation windows for coherent multi-turn decisions
+1. **Personalization**: Learns individual user preferences over time
+2. **Multi-Turn Awareness**: Explicitly models conversation context
+3. **Rich Graph Structure**: 5 node types and 21 edge types capture complex relationships
+4. **Preference Learning**: Pairwise comparison training mirrors human judgment
+5. **Scalable**: Efficient graph operations handle many users/sessions
+6. **Adaptive**: User embeddings continuously evolve with interactions
 
 ## Limitations
 
-1. **Cold Start**: New users without history get generic routing initially
-2. **Memory**: Storing user histories and embeddings requires additional memory
-3. **Complexity**: More complex than simple routers (MLPRouter, KNNRouter)
-4. **Training Data**: Requires user-labeled interaction data for best results
-5. **Privacy**: User tracking may raise privacy concerns in some applications
+1. **Complex Setup**: Requires PyTorch Geometric and specific data format
+2. **Cold Start**: New users without history get generic routing
+3. **Data Requirements**: Needs user interaction data with ratings
+4. **Training Complexity**: Must use original repository for training
+5. **Memory**: Stores user/session embeddings (can grow large)
+6. **Different from LLMRouter**: Special data format incompatible with other routers
 
 ## When to Use GMTRouter
 
-### Ideal Use Cases
+### ✅ Ideal Use Cases
 
-- **Chatbot Applications**: Multi-turn conversations with persistent users
-- **Personalized Assistants**: Systems that adapt to individual user preferences
-- **Long-Term Interactions**: Applications with returning users over time
-- **Context-Dependent Tasks**: Queries that build on previous conversation
+- **Personalized Chatbots**: Systems serving returning users
+- **Multi-User Platforms**: Applications with distinct user profiles
+- **Conversational AI**: Multi-turn dialogues building on context
+- **Preference-Sensitive Tasks**: Routing depends on user taste (creative writing, recommendations)
+- **Long-Term Interactions**: Users engage over weeks/months
 
-### Not Recommended When
+### ❌ Not Recommended When
 
-- **Single-Turn Only**: No conversation history to leverage
-- **Anonymous Users**: Cannot build user profiles without identification
-- **Cold Start Critical**: Need instant optimal performance for new users
-- **Simple Tasks**: Overhead not justified for straightforward routing
+- **Anonymous Users**: Cannot build user profiles
+- **Single-Turn Tasks**: No conversation history to leverage
+- **Simple Routing**: Overhead not justified for basic query→model mapping
+- **No User Feedback**: Cannot learn preferences without ratings
+- **Cold Start Critical**: Need immediate optimal performance for new users
 
 ## Comparison with Other Routers
 
-| Feature | GMTRouter | GraphRouter | KNNMultiRoundRouter |
-|---------|-----------|-------------|---------------------|
-| Personalization | ✅ | ❌ | ❌ |
-| Multi-Turn | ✅ | ❌ | ✅ |
-| Graph-Based | ✅ | ✅ | ❌ |
-| User Embeddings | ✅ | ❌ | ❌ |
-| Training Required | ✅ | ✅ | ✅ |
-| Cold Start Performance | ❌ | ✅ | ⚠️ |
-
-## Performance Tips
-
-1. **Context Window**: Start with 5, adjust based on conversation patterns
-2. **User Embeddings**: Larger `user_embedding_dim` for diverse user bases
-3. **GNN Layers**: 3 layers usually optimal; more can cause over-smoothing
-4. **History Length**: Balance between context and memory usage
-5. **Warm-Up Period**: Performance improves as user history accumulates
-6. **Batch Processing**: Use `route_batch()` for efficiency when possible
+| Router | Personalization | Multi-Turn | Graph-Based | Training Complexity | Cold Start |
+|--------|----------------|------------|-------------|---------------------|------------|
+| **GMTRouter** | ✅ Yes | ✅ Yes | ✅ HeteroGNN | 🔴 High | 🔴 Poor |
+| GraphRouter | ❌ No | ❌ No | ✅ GNN | 🟡 Medium | ✅ Good |
+| KNNMultiRoundRouter | ❌ No | ✅ Yes | ❌ No | 🟢 Low | ✅ Good |
+| Router-R1 | ❌ No | ✅ Yes | ❌ No | 🟢 Pre-trained | ✅ Good |
+| MLPRouter | ❌ No | ❌ No | ❌ No | 🟢 Low | ✅ Good |
 
 ## Technical Requirements
 
-- **Python**: 3.11+
-- **PyTorch**: 2.6+
-- **PyTorch Geometric**: 2.6.1+
-- **Additional**: Graph construction utilities, user tracking system
+- **Python**: 3.11.13
+- **PyTorch**: 2.6+ with CUDA 12.4+
+- **PyTorch Geometric**: 2.6.1
+- **transformers**: ≥ 4.43
+- **scikit-learn**: ≥ 1.3
+- **GPU**: Recommended for training (8GB+ VRAM)
+
+## Troubleshooting
+
+### Issue: "GMTRouter model not loaded"
+
+**Solution**: You need a trained checkpoint. Either:
+1. Train using the original GMTRouter repository
+2. Place pre-trained checkpoint at `./models/gmtrouter_checkpoint.pt`
+
+### Issue: "PyTorch Geometric import error"
+
+**Solution**: Install PyTorch Geometric:
+```bash
+pip install torch-geometric==2.6.1
+```
+
+### Issue: "User not found - using fallback routing"
+
+**Solution**: This is normal for new users. The router will learn preferences after `record_per_user` interactions (default: 10).
+
+### Issue: "Data format incorrect"
+
+**Solution**: GMTRouter requires special JSONL format with embeddings and ratings. See "Data Format" section above. You cannot use standard LLMRouter query files.
+
+## References
+
+- **GMTRouter Repository**: https://github.com/ulab-uiuc/GMTRouter
+- **HGT Paper**: "Heterogeneous Graph Transformer" (Hu et al., WWW 2020)
+- **PyTorch Geometric**: https://pytorch-geometric.readthedocs.io/
+- **Preference Learning**: Bradley-Terry model, pairwise comparison
 
 ## Example Output
 
 ```python
->>> result = router.route_single({
-...     "query_text": "Solve this math problem",
-...     "user_id": "user_123",
-...     "task": "math"
-... })
+>>> router = GMTRouter('configs/model_config_test/gmtrouter.yaml')
+>>> query = {
+...     "query_text": "Solve this calculus problem",
+...     "user_id": "student_042",
+...     "session_id": "homework_session_1",
+...     "turn": 3
+... }
+>>> result = router.route_single(query)
 >>> print(result)
 {
     'model_name': 'gpt-4',
-    'confidence': 0.87,
-    'user_preference': 0.92,
-    'conversation_context': 0.81,
-    'routing_time': 0.023
+    'confidence': 0.91,
+    'user_preference': 0.94,
+    'reasoning': 'Selected based on user student_042's learned preferences and conversation context'
 }
 ```
 
-## References
+## Chat Interface Differences
 
-For more information on graph neural networks and personalization:
-- [PyTorch Geometric Documentation](https://pytorch-geometric.readthedocs.io/)
-- [GNN Tutorial](https://distill.pub/2021/gnn-intro/)
-- [Original GMTRouter Repository](https://github.com/ulab-uiuc/GMTRouter)
+When using GMTRouter in the LLMRouter chat interface:
+
+- **User ID Required**: Each user should have a persistent ID
+- **Session Tracking**: Sessions maintain conversation context
+- **Feedback Collection**: Optionally collect ratings to improve routing
+- **Warm-Up Period**: First few queries may use fallback routing
+
+Example chat setup:
+
+```python
+# In chat interface
+from llmrouter.models.gmtrouter import GMTRouter
+
+router = GMTRouter('configs/model_config_test/gmtrouter.yaml')
+
+# For each user message
+query = {
+    "query_text": user_input,
+    "user_id": current_user_id,      # From login/session
+    "session_id": chat_session_id,
+    "turn": turn_number
+}
+
+routing_result = router.route_single(query)
+selected_model = routing_result['model_name']
+
+# After getting response, optionally collect rating
+# router.update_user_feedback(current_user_id, user_input, selected_model, rating)
+```
+
+## License
+
+GMTRouter is released under MIT License. See original repository for details.

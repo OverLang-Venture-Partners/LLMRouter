@@ -1,56 +1,72 @@
-# Config parameters for GMTRouter (Graph-based Multi-Turn Router) testing:
+# GMTRouter Testing/Inference Configuration
+# Based on: https://github.com/ulab-uiuc/GMTRouter
+#
+# Use this config for inference with pre-trained GMTRouter model
 
+# Dataset configuration
+dataset:
+  name: mt_bench                    # Dataset: chatbot_arena, gsm8k, mmlu, mt_bench
+  path: ./data                      # Path to data root
 
-data_path:
-  query_data_train: 'data/example_data/query_data/default_query_train.jsonl'
-  query_data_test: 'data/example_data/query_data/default_query_test.jsonl'
-  query_embedding_data: 'data/example_data/routing_data/query_embeddings_longformer.pt'
-  routing_data_train: 'data/example_data/routing_data/default_routing_train_data.jsonl'
-  routing_data_test: 'data/example_data/routing_data/default_routing_test_data.jsonl'
-  llm_data: 'data/example_data/llm_candidates/default_llm.json'
-  llm_embedding_data: 'data/example_data/llm_candidates/default_llm_embeddings.json'
-
-model_path:
-  load_model_path: 'saved_models/gmtrouter/gmtrouter.pt'
-  user_embeddings_path: 'saved_models/gmtrouter/user_embeddings.pt'
-
-metric:
-  weights:
-    performance: 1
-    cost: 0
-    llm_judge: 0
-
-# GMTRouter-specific configuration (must match training config)
+# GMTRouter model configuration (must match training config)
 gmt_config:
+  # Graph neural network architecture (must match training)
+  num_gnn_layers: 2                 # Number of HGT layers
+  hidden_dim: 128                   # Hidden dimension
+  dropout: 0.1                      # Dropout rate
+
   # Personalization settings
   personalization: true             # Enable user preference learning
-  context_window: 5                 # Number of previous turns to consider
+  record_per_user: 10               # Minimum records per user
 
-  # GNN architecture (must match training config)
-  hidden_dim: 128                   # Hidden layer dimension for GNN
-  num_layers: 3                     # Number of GNN layers
-  dropout: 0.1                      # Dropout rate for regularization
+  # Multi-turn settings
+  multi_turn: false                 # Multi-turn conversation mode
+  aggregation_type: mean            # Aggregation type: mean, max, attention
 
-  # User embedding settings
-  user_embedding_dim: 64            # Dimension of user preference embeddings
-  update_user_embeddings: false     # Don't update user embeddings during testing
+# Data paths
+data_path:
+  data_root: ./data                 # Root directory for GMTRouter data
+  test_set: ./data/mt_bench/test_set.jsonl
 
-  # Graph construction
-  num_neighbors: 10                 # Number of neighbors for graph construction
-  edge_threshold: 0.5               # Similarity threshold for edge creation
+# Model paths
+model_path:
+  checkpoint_root: ./models
+  load_model_path: ./models/gmtrouter_checkpoint.pt  # Pre-trained model checkpoint
 
-hparam:
-  # These parameters are needed for model initialization during inference
-  learning_rate: 0.001              # Learning rate (not used during inference)
-  weight_decay: 0.0001              # Weight decay (not used during inference)
-  train_epoch: 100                  # Training epochs (not used during inference)
-  batch_size: 32                    # Batch size (not used during inference)
-  patience: 10                      # Early stopping patience (not used during inference)
-  val_split_ratio: 0.2              # Validation split (not used during inference)
+# Inference settings
+inference:
+  batch_size: 32                    # Batch size for inference
+  device: cuda                      # Device: cuda or cpu
+  eval_metric: auc                  # Evaluation metric: auc or accuracy
 
-  # Reproducibility
-  random_state: 42                  # Random seed for reproducibility
+# Usage for Inference in LLMRouter:
+# ==================================
+# from llmrouter.models.gmtrouter import GMTRouter
+#
+# # Initialize router
+# router = GMTRouter(yaml_path='configs/model_config_test/gmtrouter.yaml')
+#
+# # Route single query with user context
+# query = {
+#     "query_text": "Explain quantum computing",
+#     "user_id": "user_123",
+#     "session_id": "session_456",
+#     "turn": 1,
+#     "conversation_history": [...]
+# }
+# result = router.route_single(query)
+#
+# # Result contains:
+# # {
+# #   "model_name": "gpt-4",
+# #   "confidence": 0.87,
+# #   "user_preference": 0.92,
+# #   "reasoning": "Selected based on user preferences..."
+# # }
 
-  # Multi-turn specific
-  max_history_length: 10            # Maximum conversation history to store
-  history_decay: 0.9                # Decay factor for older conversation turns
+# Note on Pre-trained Model:
+# ==========================
+# You need a trained GMTRouter checkpoint from the original repository.
+# Place it at: ./models/gmtrouter_checkpoint.pt
+#
+# To train a model, see configs/model_config_train/gmtrouter.yaml
