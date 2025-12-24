@@ -15,7 +15,7 @@
 
 </div>
 
-## Introduction
+## Introduction ✨
 
 **LLMRouter** is an intelligent routing system designed to optimize LLM inference by dynamically selecting the most suitable model for each query. To achieve intelligent routing, it defines:
 
@@ -23,7 +23,12 @@
 2. 📊 *Multiple Router Models*: Support for **over 16 routing models**, including KNN, SVM, MLP, Matrix Factorization, Elo Rating, Graph-based routers, BERT-based routers, Hybrid probabilistic routers, transformed-score routers, multi-round routers, and many additional advanced strategies.
 3. 🛠️ *Unified CLI*: Complete command-line interface for training, inference, and interactive chat with Gradio-based UI.
 
-## Supported Routers
+## News 📰
+
+- 🚀 **[2025-12]**: **LLMRouter** is officially released - ship smarter 🧠, cost-aware 💸 LLM routing with 16+ routers 🧭, a unified `llmrouter` CLI 🛠️, and a plugin workflow for custom routers 🧩.
+
+
+## Supported Routers 🧭
 
 ### Single-Round Routers
 | Router | Training | Inference | Description | Tutorial |
@@ -57,11 +62,13 @@
 | `knnmultiroundrouter` | ✅ | ✅ | KNN-based agentic router for complex tasks | [📖](llmrouter/models/knnmultiroundrouter/README.md) |
 | `llmmultiroundrouter` | N/A | ✅ | LLM-based agentic router for complex tasks | [📖](llmrouter/models/llmmultiroundrouter/README.md) |
 
-## Get Started
+## Get Started 🚀
 
 ### Installation
 
-Clone the repository and install from source using a virtual environment (e.g., with anaconda3):
+#### Install from source
+
+Clone the repository and install in editable mode using a virtual environment (e.g., with anaconda3):
 
 ```bash
 # Clone the repository
@@ -76,7 +83,13 @@ conda activate llmrouter
 pip install -e .
 ```
 
-> **Note**: PyPI package coming soon! Once published, you'll be able to install directly with `pip install llmrouter`.
+#### Install from PyPI
+
+```bash
+pip install llmrouter
+```
+
+
 ### Training a Router
 
 Train various router models with your configuration:
@@ -311,7 +324,16 @@ def route_single(self, query_input):
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ulab-uiuc/LLMRouter&type=date&legend=top-left)](https://www.star-history.com/#ulab-uiuc/LLMRouter&type=date&legend=top-left) -->
 
-## Citation
+
+## TODO 🗺️
+
+- [ ] Improve personalized routers: stronger user profiling, cold-start strategies, and online feedback updates.
+- [ ] Integrate a multimodal router: support image/audio inputs and route by modality + task type to the right multimodal model.
+- [ ] Add continual/online learning to adapt routers to domain drift (e.g., periodic re-training + feedback loops).
+
+
+
+## Citation 📚
 
 If you find LLMRouter useful for your research or projects, please cite it as:
 
