@@ -25,13 +25,9 @@
 
 </div>
 
-<<<<<<< HEAD
 
 
-## Introduction ✨
-=======
 ## ✨ Introduction
->>>>>>> 90833e5de5280f012d1f43050943626895784299
 
 <div align="center">
   <img src="assets/llmrouter.png" alt="LLMRouter Overview" style="width: 100%; max-width: 1000px;">
