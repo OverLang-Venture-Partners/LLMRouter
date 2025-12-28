@@ -5,25 +5,25 @@
 <h1 align="center">🚀 LLMRouter: An Open-Source Library for LLM Routing</h1>
 
 
-
 <div align="center">
-
   <p>
-    <a href="https://www.python.org/downloads/release/python-3109/">
+    <a href="https://www.python.org/downloads/release/python-3109/" style="text-decoration: none;">
       <img src="https://img.shields.io/badge/PYTHON-3.10-3776AB?style=for-the-badge&logo=python&logoColor=white">
     </a>
-    <a href="https://github.com/ulab-uiuc/LLMRouter/pulls">
+    <a href="https://github.com/ulab-uiuc/LLMRouter/pulls" style="text-decoration: none;">
       <img src="https://img.shields.io/badge/PRS-WELCOME-orange?style=for-the-badge">
     </a>
-    <a href="https://join.slack.com/t/llmrouteropen-ri04588/shared_invite/zt-3jz3cc6d1-ncwKEHvvWe0OczHx7K5c0g">
+    <a href="https://join.slack.com/t/llmrouteropen-ri04588/shared_invite/zt-3jz3cc6d1-ncwKEHvvWe0OczHx7K5c0g" style="text-decoration: none;">
       <img src="https://img.shields.io/badge/SLACK-JOIN%20US-4A154B?style=for-the-badge&logo=slack&logoColor=white">
     </a>
-    <a href="LICENSE">
+    <a href="LICENSE" style="text-decoration: none;">
       <img src="https://img.shields.io/badge/LICENSE-MIT-2EA44F?style=for-the-badge">
     </a>
   </p>
-
 </div>
+
+
+
 
 
 
@@ -272,8 +272,6 @@ Input file formats supported: `.txt` (one query per line), `.json` (list of stri
 
 ### Interactive Chat Interface
 
-Launch a Gradio-based chat interface (requires API keys - see [Setting Up API Keys](#-setting-up-api-keys) section):
-
 <div style="text-align:center;">
     <img src="assets/llmrouter_chat.gif" style="width: 100%; height: auto;">
 </div>
@@ -289,9 +287,8 @@ Launch a Gradio-based chat interface (requires API keys - see [Setting Up API Ke
     </video>
 </div>
 
-<p align="center">
-    <strong>🎥 Full Demo:</strong> Complete walkthrough demonstrating the interactive chat interface, including query routing, model selection, and response generation.
-</p>
+Launch the chat interface (requires API keys - see [Setting Up API Keys](#-setting-up-api-keys) section):
+
 ```bash
 # Basic chat interface
 llmrouter chat --router knnrouter --config config.yaml
