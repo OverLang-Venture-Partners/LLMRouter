@@ -121,25 +121,25 @@ RouterDC can be used via the `llmrouter` command-line interface:
 
 ```bash
 # Train the RouterDC (GPU recommended)
-llmrouter train --router routerdc --config configs/model_config_train/routerdc.yaml --device cuda
+llmrouter train --router routerdc --config configs/model_config_train/dcrouter.yaml --device cuda
 
 # Train with quiet mode
-llmrouter train --router routerdc --config configs/model_config_train/routerdc.yaml --device cuda --quiet
+llmrouter train --router routerdc --config configs/model_config_train/dcrouter.yaml --device cuda --quiet
 ```
 
 ### Inference
 
 ```bash
 # Route a single query
-llmrouter infer --router routerdc --config configs/model_config_test/routerdc.yaml \
+llmrouter infer --router routerdc --config configs/model_config_test/dcrouter.yaml \
     --query "Explain the concept of machine learning"
 
 # Route queries from a file
-llmrouter infer --router routerdc --config configs/model_config_test/routerdc.yaml \
+llmrouter infer --router routerdc --config configs/model_config_test/dcrouter.yaml \
     --input queries.jsonl --output results.json
 
 # Route only (without calling LLM API)
-llmrouter infer --router routerdc --config configs/model_config_test/routerdc.yaml \
+llmrouter infer --router routerdc --config configs/model_config_test/dcrouter.yaml \
     --query "What is deep learning?" --route-only
 ```
 
@@ -147,13 +147,13 @@ llmrouter infer --router routerdc --config configs/model_config_test/routerdc.ya
 
 ```bash
 # Launch chat interface
-llmrouter chat --router routerdc --config configs/model_config_test/routerdc.yaml
+llmrouter chat --router routerdc --config configs/model_config_test/dcrouter.yaml
 
 # Launch with custom port
-llmrouter chat --router routerdc --config configs/model_config_test/routerdc.yaml --port 8080
+llmrouter chat --router routerdc --config configs/model_config_test/dcrouter.yaml --port 8080
 
 # Create a public shareable link
-llmrouter chat --router routerdc --config configs/model_config_test/routerdc.yaml --share
+llmrouter chat --router routerdc --config configs/model_config_test/dcrouter.yaml --share
 ```
 
 ---
