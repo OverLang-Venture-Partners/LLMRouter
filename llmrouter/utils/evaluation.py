@@ -413,20 +413,39 @@ def calculate_task_performance(
     
     # Determine metric based on task_name if not provided
     if metric is None and task_name:
-        # Map task names to metrics
-        if task_name in ["natural_qa", "trivia_qa", "squad", "boolq"]:
-            metric = "cem"
-        elif task_name in ["mmlu", "gpqa", "commonsense_qa", "openbook_qa", "arc_challenge"]:
-            metric = "em_mc"
-        elif task_name == "gsm8k":
-            metric = "gsm8k"
-        elif task_name == "math":
-            metric = "math"
-        else:
-            metric = "cem"  # Default to CEM
+        # First check custom task-to-metric registry (for user-defined tasks)
+        try:
+            from llmrouter.utils.prompting import TASK_METRIC_REGISTRY
+            if task_name in TASK_METRIC_REGISTRY:
+                metric = TASK_METRIC_REGISTRY[task_name]
+        except ImportError:
+            pass
+        
+        # If not found in registry, check built-in task-to-metric mappings
+        if metric is None:
+            if task_name in ["natural_qa", "trivia_qa", "squad", "boolq"]:
+                metric = "cem"
+            elif task_name in ["mmlu", "gpqa", "commonsense_qa", "openbook_qa", "arc_challenge"]:
+                metric = "em_mc"
+            elif task_name == "gsm8k":
+                metric = "gsm8k"
+            elif task_name == "math":
+                metric = "math"
+            else:
+                metric = "cem"  # Default to CEM
     
     # Evaluate based on metric
     try:
+        # First check if metric is registered in EVALUATION_METRICS (for custom metrics)
+        try:
+            from llmrouter.evaluation.batch_evaluator import EVALUATION_METRICS
+            if metric in EVALUATION_METRICS:
+                eval_func = EVALUATION_METRICS[metric]
+                return float(eval_func(prediction, ground_truth))
+        except (ImportError, KeyError):
+            pass
+        
+        # Fall back to built-in metric implementations
         if metric == "em":
             return float(exact_match_score(prediction, ground_truth))
         elif metric == "em_mc":

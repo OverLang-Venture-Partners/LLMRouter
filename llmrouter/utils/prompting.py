@@ -2,26 +2,55 @@
 Prompt formatting utilities for LLMRouter scripts
 """
 
+from typing import Optional
 from llmrouter.prompts import load_prompt_template
 
 # Registry for custom prompt formatters (for extensibility)
 PROMPT_REGISTRY = {}
 
+# Registry for task-to-metric mappings (for automatic metric selection)
+TASK_METRIC_REGISTRY = {}
 
-def register_prompt(task_name: str):
+
+def register_prompt(task_name: str, default_metric: Optional[str] = None):
     """
     Decorator to register a custom prompt formatter.
     
     Args:
         task_name: Name of the task to register (e.g., 'my_custom_task')
+        default_metric: Optional default metric name for this task. If provided,
+                       this metric will be automatically used when task_name is
+                       specified but metric is not in calculate_task_performance().
     
     Returns:
         Decorator function
+    
+    Example:
+        @register_prompt('sentiment_analysis', default_metric='sentiment_exact_match')
+        def format_sentiment_analysis_prompt(sample_data):
+            # ...
     """
     def decorator(func):
         PROMPT_REGISTRY[task_name] = func
+        # Register task-to-metric mapping if metric is provided
+        if default_metric is not None:
+            TASK_METRIC_REGISTRY[task_name] = default_metric
         return func
     return decorator
+
+
+def register_task_metric(task_name: str, metric_name: str):
+    """
+    Register a default metric for a task (can be called separately if needed).
+    
+    Args:
+        task_name: Name of the task
+        metric_name: Name of the metric to use by default for this task
+    
+    Example:
+        register_task_metric('sentiment_analysis', 'sentiment_exact_match')
+    """
+    TASK_METRIC_REGISTRY[task_name] = metric_name
 
 
 def format_mc_prompt(question, choices):
