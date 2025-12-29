@@ -280,25 +280,25 @@ def infer_query(
     """
     router_name_lower = router_name.lower()
 
-    # Check if router has answer_query method (full pipeline)
-    if router_name_lower in ROUTERS_WITH_ANSWER_QUERY and hasattr(router_instance, "answer_query"):
-        # Use full pipeline: decompose + route + execute + aggregate
-        try:
-            final_answer = router_instance.answer_query(query, return_intermediate=False)
-            return {
-                "success": True,
-                "query": query,
-                "response": final_answer,
-                "method": "answer_query",
-            }
-        except Exception as e:
-            import traceback
-            return {
-                "success": False,
-                "query": query,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            }
+    # # Check if router has answer_query method (full pipeline)
+    # if router_name_lower in ROUTERS_WITH_ANSWER_QUERY and hasattr(router_instance, "answer_query"):
+    #     # Use full pipeline: decompose + route + execute + aggregate
+    #     try:
+    #         final_answer = router_instance.answer_query(query, return_intermediate=False)
+    #         return {
+    #             "success": True,
+    #             "query": query,
+    #             "response": final_answer,
+    #             "method": "answer_query",
+    #         }
+    #     except Exception as e:
+    #         import traceback
+    #         return {
+    #             "success": False,
+    #             "query": query,
+    #             "error": str(e),
+    #             "traceback": traceback.format_exc(),
+    #         }
 
     # Handle RouterR1 specially (requires model_id, api_base, api_key)
     if router_name_lower in ROUTERS_REQUIRING_SPECIAL_ARGS:
