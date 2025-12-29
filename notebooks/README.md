@@ -116,7 +116,7 @@ All notebooks are compatible with Google Colab. To use:
 1. Upload the notebook to Colab
 2. Install dependencies:
    ```python
-   !pip install llmrouter transformers torch
+   !pip install llmrouter-lib transformers torch
    ```
 3. Clone the repository (for data and configs):
    ```python
@@ -156,6 +156,6 @@ os.environ['API_KEYS'] = '["key1", "key2"]'
 - Verify all required files exist
 
 ### Import Errors
-- Install all dependencies: `pip install llmrouter`
+- Install all dependencies: `pip install llmrouter-lib`
 - Ensure you're in the correct directory
 - Check Python path includes project root
