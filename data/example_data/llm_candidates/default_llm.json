@@ -8,30 +8,12 @@
     "service": "NVIDIA",
     "api_endpoint": "https://integrate.api.nvidia.com/v1"
   },
-  "gemma-2-9b-it": {
-    "size": "9B",
-    "feature": "Gemma-2-9B-IT is a 2.9-billion parameter instruction-tuned model from Google, designed for general text processing and conversational applications. This compact yet capable model offers exceptional value with ultra-low pricing of $0.10 per million input tokens and $0.10 per million output tokens.",
-    "input_price": 0.10,
-    "output_price": 0.10,
-    "model": "google/gemma-2-9b-it",
-    "service": "NVIDIA",
-    "api_endpoint": "https://integrate.api.nvidia.com/v1"
-  },
   "llama-3.1-8b-instruct": {
     "size": "8B",
     "feature": "Llama-3.1-8B-Instruct is Meta's 8-billion parameter model from the advanced Llama-3 series, specifically designed for conversational AI and complex reasoning tasks. This versatile model combines strong performance with reasonable costs at $0.20 per million input tokens and $0.20 per million output tokens.",
     "input_price": 0.20,
     "output_price": 0.20,
     "model": "meta/llama-3.1-8b-instruct",
-    "service": "NVIDIA",
-    "api_endpoint": "https://integrate.api.nvidia.com/v1"
-  },
-  "llama3-chatqa-1.5-8b": {
-    "size": "8B",
-    "feature": "Llama3-ChatQA-1.5-8B is an NVIDIA fine-tuned 8-billion parameter model specifically optimized for question-answering and reasoning applications. This specialized model delivers enhanced performance in conversational AI scenarios at $0.20 per million input and output tokens.",
-    "input_price": 0.20,
-    "output_price": 0.20,
-    "model": "nvidia/llama3-chatqa-1.5-8b",
     "service": "NVIDIA",
     "api_endpoint": "https://integrate.api.nvidia.com/v1"
   },
@@ -50,6 +32,15 @@
     "input_price": 0.90,
     "output_price": 0.90,
     "model": "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "service": "NVIDIA",
+    "api_endpoint": "https://integrate.api.nvidia.com/v1"
+  },
+  "llama3-70b-instruct": {
+    "size": "70B",
+    "feature": "Llama3-70B-Instruct represents an alternative naming convention for Meta's powerful 70-billion parameter model, maintaining the same robust capabilities and performance characteristics. This model provides comprehensive language understanding and generation at $0.90 per million input and output tokens.",
+    "input_price": 0.90,
+    "output_price": 0.90,
+    "model": "meta/llama3-70b-instruct",
     "service": "NVIDIA",
     "api_endpoint": "https://integrate.api.nvidia.com/v1"
   },
