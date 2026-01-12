@@ -648,7 +648,7 @@ If you find LLMRouter useful for your research or projects, please cite it as:
 ```bibtex
 @misc{llmrouter2025,
   title        = {LLMRouter: An Open-Source Library for LLM Routing},
-  author       = {Tao Feng and Haozhen Zhang and Zijie Lei and Haodong Yue and Chongshan Lin and Jiaxuan You},
+  author       = {Tao Feng and Haozhen Zhang and Zijie Lei and Haodong Yue and Chongshan Lin and Ge Liu and Jiaxuan You},
   year         = {2025},
   howpublished = {\url{https://github.com/ulab-uiuc/LLMRouter}},
   note         = {GitHub repository}
