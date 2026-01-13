@@ -260,13 +260,12 @@ API_ENDPOINT="https://integrate.api.nvidia.com/v1/chat/completions"
 # These are example models; replace with the actual model names/IDs
 # from your LLM candidate JSON file
 MODELS=(
-  "google/gemma-2-9b-it"
-  "google/codegemma-7b"
-  "nvidia/llama-3.1-nemotron-51b-instruct"
-  "nvidia/llama3-chatqa-1.5-70b"
-  "nvidia/llama3-chatqa-1.5-8b"
-  "writer/palmyra-creative-122b"
-  "nv-mistralai/mistral-nemo-12b-instruct"
+  "qwen/qwen2.5-7b-instruct"
+  "meta/llama-3.1-8b-instruct"
+  "mistralai/mistral-7b-instruct-v0.3"
+  "nvidia/llama-3.3-nemotron-super-49b-v1"
+  "mistralai/mixtral-8x7b-instruct-v0.1"
+  "mistralai/mixtral-8x22b-instruct-v0.1"
 )
 
 SYSTEM_PROMPT="Hello."
