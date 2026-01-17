@@ -128,6 +128,30 @@ class KNNMultiRoundRouter(MetaRouter):
                 f"Failed to load KNN model. Please ensure the model is trained and saved at {knn_model_path}"
             )
 
+    def _route_sub_query(self, sub_query: str) -> str:
+        """
+        Route a single sub-query using KNN to select the best model.
+        
+        This method is useful for testing and verification purposes, allowing
+        you to test routing decisions without executing the full pipeline.
+        
+        Args:
+            sub_query: Sub-query string to route
+            
+        Returns:
+            str: Model name that the sub-query is routed to
+        """
+        # Load KNN model if not already loaded
+        self._load_knn_model_if_needed()
+        
+        # Get embedding for the sub-query
+        query_embedding = [get_longformer_embedding(sub_query).numpy()]
+        
+        # Use KNN to predict the best model
+        model_name = self.knn_model.predict(query_embedding)[0]
+        
+        return model_name
+
     def route_single(self, query):
         """
         Route a single query through the full pipeline: decompose → route → execute → aggregate.
@@ -183,8 +207,7 @@ class KNNMultiRoundRouter(MetaRouter):
         sub_responses = []
         for sub_query in sub_queries:
             # Route the sub-query using KNN
-            query_embedding = [get_longformer_embedding(sub_query).numpy()]
-            model_name = self.knn_model.predict(query_embedding)[0]
+            model_name = self._route_sub_query(sub_query)
             
             # Execute the sub-query with the routed model
             execution_result = self._execute_sub_query(sub_query, model_name)
@@ -389,15 +412,31 @@ class KNNMultiRoundRouter(MetaRouter):
         api_model_name = model_name
         api_endpoint = None
         service = None
-        if hasattr(self, 'llm_data') and self.llm_data and model_name in self.llm_data:
-            api_model_name = self.llm_data[model_name].get("model", model_name)
-            # Get API endpoint from llm_data, fallback to router config
-            api_endpoint = self.llm_data[model_name].get(
-                "api_endpoint",
-                self.cfg.get("api_endpoint")
-            )
-            # Get service field for service-specific API key selection
-            service = self.llm_data[model_name].get("service")
+        if hasattr(self, 'llm_data') and self.llm_data:
+            if model_name in self.llm_data:
+                # Direct lookup - works when model_name is a key in llm_data
+                api_model_name = self.llm_data[model_name].get("model", model_name)
+                # Get API endpoint from llm_data, fallback to router config
+                api_endpoint = self.llm_data[model_name].get(
+                    "api_endpoint",
+                    self.cfg.get("api_endpoint")
+                )
+                # Get service field for service-specific API key selection
+                service = self.llm_data[model_name].get("service")
+            else:
+                # Fallback: Search by "model" field - handles cases where model_name is an API name
+                # or doesn't exactly match a key (e.g., normalization differences)
+                for key, value in self.llm_data.items():
+                    if value.get("model") == model_name or key == model_name:
+                        api_model_name = value.get("model", model_name)
+                        # Get API endpoint from llm_data, fallback to router config
+                        api_endpoint = value.get(
+                            "api_endpoint",
+                            self.cfg.get("api_endpoint")
+                        )
+                        # Get service field for service-specific API key selection
+                        service = value.get("service")
+                        break
         
         # If still no endpoint found, try router config
         if api_endpoint is None:
@@ -503,10 +542,21 @@ Format:
             # Get endpoint for base_model from llm_data or config
             base_api_endpoint = None
             service = None
-            if hasattr(self, 'llm_data') and self.llm_data and self.base_model in self.llm_data:
-                base_api_endpoint = self.llm_data[self.base_model].get("api_endpoint", self.api_endpoint)
-                # Get service field for service-specific API key selection
-                service = self.llm_data[self.base_model].get("service")
+            if hasattr(self, 'llm_data') and self.llm_data:
+                if self.base_model in self.llm_data:
+                    # Direct lookup - works when base_model is a key in llm_data
+                    base_api_endpoint = self.llm_data[self.base_model].get("api_endpoint", self.api_endpoint)
+                    # Get service field for service-specific API key selection
+                    service = self.llm_data[self.base_model].get("service")
+                else:
+                    # Fallback: Search by "model" field - handles cases where base_model is an API name
+                    # or doesn't exactly match a key (e.g., normalization differences)
+                    for key, value in self.llm_data.items():
+                        if value.get("model") == self.base_model or key == self.base_model:
+                            base_api_endpoint = value.get("api_endpoint", self.api_endpoint)
+                            # Get service field for service-specific API key selection
+                            service = value.get("service")
+                            break
             else:
                 base_api_endpoint = self.api_endpoint
             
