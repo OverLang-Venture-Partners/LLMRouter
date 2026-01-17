@@ -389,15 +389,31 @@ class KNNMultiRoundRouter(MetaRouter):
         api_model_name = model_name
         api_endpoint = None
         service = None
-        if hasattr(self, 'llm_data') and self.llm_data and model_name in self.llm_data:
-            api_model_name = self.llm_data[model_name].get("model", model_name)
-            # Get API endpoint from llm_data, fallback to router config
-            api_endpoint = self.llm_data[model_name].get(
-                "api_endpoint",
-                self.cfg.get("api_endpoint")
-            )
-            # Get service field for service-specific API key selection
-            service = self.llm_data[model_name].get("service")
+        if hasattr(self, 'llm_data') and self.llm_data:
+            if model_name in self.llm_data:
+                # Direct lookup - works when model_name is a key in llm_data
+                api_model_name = self.llm_data[model_name].get("model", model_name)
+                # Get API endpoint from llm_data, fallback to router config
+                api_endpoint = self.llm_data[model_name].get(
+                    "api_endpoint",
+                    self.cfg.get("api_endpoint")
+                )
+                # Get service field for service-specific API key selection
+                service = self.llm_data[model_name].get("service")
+            else:
+                # Fallback: Search by "model" field - handles cases where model_name is an API name
+                # or doesn't exactly match a key (e.g., normalization differences)
+                for key, value in self.llm_data.items():
+                    if value.get("model") == model_name or key == model_name:
+                        api_model_name = value.get("model", model_name)
+                        # Get API endpoint from llm_data, fallback to router config
+                        api_endpoint = value.get(
+                            "api_endpoint",
+                            self.cfg.get("api_endpoint")
+                        )
+                        # Get service field for service-specific API key selection
+                        service = value.get("service")
+                        break
         
         # If still no endpoint found, try router config
         if api_endpoint is None:
@@ -503,10 +519,21 @@ Format:
             # Get endpoint for base_model from llm_data or config
             base_api_endpoint = None
             service = None
-            if hasattr(self, 'llm_data') and self.llm_data and self.base_model in self.llm_data:
-                base_api_endpoint = self.llm_data[self.base_model].get("api_endpoint", self.api_endpoint)
-                # Get service field for service-specific API key selection
-                service = self.llm_data[self.base_model].get("service")
+            if hasattr(self, 'llm_data') and self.llm_data:
+                if self.base_model in self.llm_data:
+                    # Direct lookup - works when base_model is a key in llm_data
+                    base_api_endpoint = self.llm_data[self.base_model].get("api_endpoint", self.api_endpoint)
+                    # Get service field for service-specific API key selection
+                    service = self.llm_data[self.base_model].get("service")
+                else:
+                    # Fallback: Search by "model" field - handles cases where base_model is an API name
+                    # or doesn't exactly match a key (e.g., normalization differences)
+                    for key, value in self.llm_data.items():
+                        if value.get("model") == self.base_model or key == self.base_model:
+                            base_api_endpoint = value.get("api_endpoint", self.api_endpoint)
+                            # Get service field for service-specific API key selection
+                            service = value.get("service")
+                            break
             else:
                 base_api_endpoint = self.api_endpoint
             
