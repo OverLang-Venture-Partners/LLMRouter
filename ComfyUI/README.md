@@ -38,8 +38,8 @@ To use the nodes:
 ### Loading the Template
 To use the template:
 1.  Open the ComfyUI web interface in your browser.
-2.  Click on **"Workflows"**.
-3.  Select **`llm_router_template.json`**.
+2.  Navigate to the **`Workflows`** category.
+3.  Select `llm_router_template.json`.
 
 This will load a complete workflow connected and ready to run.
 
