@@ -41,6 +41,7 @@ from llmrouter.models import (
     LargestLLM,
     AutomixRouter,
     GMTRouter,
+    PersonalizedRouter,
 )
 from llmrouter.models.llmmultiroundrouter import LLMMultiRoundRouter
 from llmrouter.models.knnmultiroundrouter import KNNMultiRoundRouter
@@ -90,6 +91,10 @@ if CausalLMRouter is not None:
 if GMTRouter is not None:
     ROUTER_REGISTRY["gmtrouter"] = GMTRouter
     ROUTER_REGISTRY["gmt_router"] = GMTRouter
+
+if PersonalizedRouter is not None:
+    ROUTER_REGISTRY["personalizedrouter"] = PersonalizedRouter
+    ROUTER_REGISTRY["personalized_router"] = PersonalizedRouter
 
 # Add RouterR1 if available
 if RouterR1 is not None:

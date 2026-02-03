@@ -24,6 +24,7 @@ from llmrouter.models import (
     GraphRouter,
     CausalLMRouter,
     GMTRouter,
+    PersonalizedRouter,
     # Trainers
     KNNRouterTrainer,
     SVMRouterTrainer,
@@ -36,6 +37,7 @@ from llmrouter.models import (
     GraphTrainer,
     CausalLMTrainer,
     GMTRouterTrainer,
+    PersonalizedRouterTrainer,
 )
 
 # Import multi-round routers
@@ -62,6 +64,8 @@ ROUTER_TRAINER_REGISTRY: Dict[str, Tuple[Any, Any]] = {
     "knnmultiroundrouter": (KNNMultiRoundRouter, KNNMultiRoundRouterTrainer),
     "gmtrouter": (GMTRouter, GMTRouterTrainer),
     "gmt_router": (GMTRouter, GMTRouterTrainer),
+    "personalizedrouter": (PersonalizedRouter, PersonalizedRouterTrainer),
+    "personalized_router": (PersonalizedRouter, PersonalizedRouterTrainer),
 }   
 
 # Routers that do not support training
