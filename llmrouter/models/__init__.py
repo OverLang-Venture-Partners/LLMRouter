@@ -54,6 +54,13 @@ except Exception:
     GMTRouter = None
     GMTRouterTrainer = None
 
+try:
+    from .personalizedrouter import PersonalizedRouter
+    from .personalizedrouter import PersonalizedRouterTrainer
+except Exception:
+    PersonalizedRouter = None
+    PersonalizedRouterTrainer = None
+
 __all__ = [
     "MetaRouter",
     "BaseTrainer",
@@ -94,4 +101,7 @@ __all__ = [
 
     "GMTRouter",
     "GMTRouterTrainer",
+
+    "PersonalizedRouter",
+    "PersonalizedRouterTrainer",
 ]
