@@ -83,6 +83,7 @@
 | Router | Training | Inference | Description | Tutorial |
 |--------|:--------:|:---------:|-------------|:--------:|
 | `gmtrouter` | ✅ | ✅ | Graph-based personalized router with user preference learning | [📖](llmrouter/models/gmtrouter/README.md) |
+| `personalizedrouter` | ✅ | ✅ | GNN-based personalized router with user features | [📖](llmrouter/models/personalizedrouter/README.md) |
 
 ### Agentic Routers
 | Router | Training | Inference | Description | Tutorial |
@@ -676,6 +677,7 @@ LLMRouter builds upon the excellent research from the community. We gratefully a
 - [**Hybrid LLM**](https://arxiv.org/abs/2404.14618) - Cost-Efficient and Quality-Aware Query Routing (ICLR 2024)
 - [**GraphRouter**](https://arxiv.org/abs/2410.03834) - A Graph-based Router for LLM Selections (ICLR 2025)
 - [**GMTRouter**](https://arxiv.org/abs/2511.08590) - Personalized LLM Router over Multi-turn User Interactions
+- [**PersonalizedRouter**](https://arxiv.org/abs/2511.16883) - Personalized LLM Routing via Graph-based User Preference Modeling
 - [**Router-R1**](https://arxiv.org/abs/2506.09033) - Teaching LLMs Multi-Round Routing and Aggregation via RL (NeurIPS 2025)
 - [**FusionFactory**](https://arxiv.org/abs/2507.10540) - Fusing LLM Capabilities with Multi-LLM Log Data
 
