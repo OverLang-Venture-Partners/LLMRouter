@@ -8,20 +8,85 @@ The **Personalized Router** uses Graph Neural Networks (GNNs) to make personaliz
 
 This router implements the **PersonalizedRouter** approach:
 
-- **[PersonalizedRouter: User-Adaptive LLM Selection via Graph Neural Networks](https://arxiv.org/abs/2511.16883)**
-  - (2024). arXiv:2511.16883.
+- **[PersonalizedRouter: Personalized LLM Routing via Graph-based User Preference Modeling](https://arxiv.org/abs/2511.16883)**
+  - Dai, Z., et al. (2025). arXiv:2511.16883.
   - Constructs heterogeneous graph with task, query, user, and LLM nodes for personalized routing.
   - Learns user-specific routing patterns through personalized message passing.
+
+## Important Notice
+
+**PersonalizedRouter uses a dedicated dataset and data format that differs from other routers.**
+
+- **Dataset Source**: PersonaRoute-Bench
+- **Download Link**:
+  ```text
+  https://huggingface.co/datasets/ulab-ai/PersonaRoute-Bench
+  ```
+- **Available Files**: The dataset provides single-file CSVs and train/val/test splits (e.g., `router_user_data.csv`, `router_user_train_data.csv`, `router_user_val_data.csv`, `router_user_test_data.csv`).
+
+## Data Format
+
+PersonaRoute-Bench is provided as **CSV**.
+
+### Columns
+
+| Column | Description |
+|--------|-------------|
+| `user_id` | User identifier for personalization. |
+| `performance_preference` | User preference weight between performance and cost. |
+| `task_id` | Task identifier. |
+| `query` | Query text. |
+| `query_embedding` | Query embedding vector. |
+| `effect` | Performance effect/score for the query-LLM pair. |
+| `cost` | Cost signal for the query-LLM pair. |
+| `ground_truth` | Ground-truth outcome or label. |
+| `metric` | Metric name or category for the row. |
+| `llm` | LLM name for the row. |
+| `task_description` | Task description text. |
+| `task_description_embedding` | Task description embedding vector. |
+| `response` | Model response text. |
+| `reward` | Reward score. |
+| `best_llm` | Best LLM indicator for the query. |
+
+## Data Preparation
+
+### Step 1: Download the dataset
+
+Use one of the following approaches:
+
+```bash
+# Using Hugging Face CLI (recommended)
+huggingface-cli download ulab-ai/PersonaRoute-Bench --repo-type dataset --local-dir data/personaroute_bench
+```
+
+```python
+# Using datasets library
+from datasets import load_dataset
+ds = load_dataset("ulab-ai/PersonaRoute-Bench")
+```
+
+### Step 2: Choose the CSV files
+
+You can use either:
+
+- A single CSV (e.g., `router_user_data.csv`)
+- Or train/val/test splits (e.g., `router_user_train_data.csv`, `router_user_val_data.csv`, `router_user_test_data.csv`)
+
+The dataset file list is available on the Hugging Face dataset page.
+
+### Step 3: Point your config to the data
+
+Set the `data_path` fields in your YAML config to the downloaded CSVs (see the example in this README).
 
 ## How It Works
 
 ### Graph Structure
 
 ```
-                      User Nodes (one-hot encoding)
+                      User Nodes
                             |
                             |
-        Query Nodes ─── edges(performance) ──→ LLM Nodes
+        Query Nodes ─── edges ──→ LLM Nodes
                             |
                             |
                       Task Nodes
@@ -32,30 +97,21 @@ This router implements the **PersonalizedRouter** approach:
 ```
 
 **Node Types:**
-- **Query Nodes**: Each query is a node with Longformer embedding features
+- **Query Nodes**: Each query is a node with embedding features
 - **LLM Nodes**: Each LLM is a node with learned/provided embeddings
-- **User Nodes**: Each user is a node with one-hot features (enables personalization)
-- **Task Nodes**: Each task has an embedding (supports multi-task learning)
-- **Edges**: Connect queries to LLMs, weighted by performance scores
-- **Additional Edges**: Connect LLMs within the same family
+- **User Nodes**: Each user is a node, whose embedding represents the user’s preference features.
+- **Task Nodes**: Each task has an embedding
+- **Edges**: Connect queries to LLMs, weighted by scores
 
 ### Routing Mechanism
 
-1. **Personalized Graph Construction**:
-   - Create bipartite graph: queries on one side, LLMs on the other
-   - Add user nodes with one-hot encoding
-   - Expand the graph for each user (each user has their own query-LLM interactions)
-   - Add edges from each query to all LLMs
+PersonalizedRouter models LLM routing as a heterogeneous graph learning problem that adapts model selection to individual user preferences.
+- Construct a global heterogeneous graph containing users, queries, tasks, and LLMs
+- Learn latent user preference embeddings directly from interaction data
+- Use heterogeneous GNN message passing to jointly encode user, task, and LLM characteristics
+- For each (user, query) pair, estimate a personalized utility score over candidate LLMs and route to the most suitable model
 
-2. **GNN Forward Pass**:
-   - Aggregate information from neighboring nodes (queries, LLMs, users)
-   - Update node representations using message passing
-   - Apply graph convolution layers with user-specific embeddings
-
-3. **Personalized Prediction**:
-   - For each user-query-LLM combination, predict suitability score
-   - Select LLM with highest predicted score for that specific user
-   - Different users may receive different recommendations for the same query
+This formulation enables the same query to be routed differently across users and supports efficient generalization across users and tasks.
 
 ### Training Strategy
 
@@ -72,7 +128,6 @@ Uses **edge masking** for training with personalization:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `embedding_dim` | int | `64` | Hidden layer dimension for GNN. Controls model capacity. Range: 32-256. |
-| `edge_dim` | int | `1` | Edge feature dimension (1 for performance, 2 for [cost, effect]). |
 | `user_num` | int | `1000` | Number of users for personalization. Each user gets a unique node. |
 | `num_task` | int | `4` | Number of tasks for multi-task learning. |
 | `learning_rate` | float | `0.001` | Learning rate for AdamW optimizer. Range: 0.0001-0.01. |
@@ -88,11 +143,12 @@ Uses **edge masking** for training with personalization:
 
 | Parameter | Description |
 |-----------|-------------|
-| `routing_data_train` | Training query-LLM performance data (JSONL) |
-| `query_data_train` | Training queries (JSONL) |
-| `query_embedding_data` | Pre-computed Longformer query embeddings (PyTorch tensor) |
-| `llm_data` | LLM information with optional embeddings (JSON) |
-| `llm_embedding_data` | Pre-computed LLM embeddings (JSON) |
+| `routing_data_path` | Routing data CSV path or a directory containing a single CSV. |
+| `routing_data_train` | Training routing data CSV. |
+| `routing_data_val` | Validation routing data CSV. |
+| `routing_data_test` | Test routing data CSV. |
+| `llm_data` | LLM metadata (JSON). |
+| `llm_embedding_data` | Pre-computed LLM embeddings (pickle / `.pkl`). |
 
 ### Model Paths
 
@@ -121,7 +177,7 @@ llmrouter train --router personalizedrouter --config configs/model_config_train/
 ```bash
 # Route a single query with user_id
 llmrouter infer --router personalizedrouter --config configs/model_config_test/personalizedrouter.yaml \
-    --query "Explain quantum mechanics" --user-id 0
+    --query "Explain quantum mechanics"
 
 # Route queries from a file (with user_id in each query)
 llmrouter infer --router personalizedrouter --config configs/model_config_test/personalizedrouter.yaml \
@@ -129,7 +185,7 @@ llmrouter infer --router personalizedrouter --config configs/model_config_test/p
 
 # Route only (without calling LLM API)
 llmrouter infer --router personalizedrouter --config configs/model_config_test/personalizedrouter.yaml \
-    --query "What is machine learning?" --user-id 1 --route-only
+    --query "What is machine learning?" --route-only
 ```
 
 ### Interactive Chat
@@ -201,12 +257,12 @@ for result in results:
 
 ```yaml
 data_path:
-  query_data_train: 'data/example_data/query_data/default_query_train.jsonl'
-  query_data_test: 'data/example_data/query_data/default_query_test.jsonl'
-  query_embedding_data: 'data/example_data/routing_data/query_embeddings_longformer.pt'
-  routing_data_train: 'data/example_data/routing_data/default_routing_train_data.jsonl'
-  llm_data: 'data/example_data/llm_candidates/default_llm.json'
-  llm_embedding_data: 'data/example_data/llm_candidates/default_llm_embeddings.json'
+  routing_data_path: 'data/personaroute_bench/router_user_data_v1.csv'
+  routing_data_train: 'data/personaroute_bench/router_user_train_data_v1.csv'
+  routing_data_val: 'data/personaroute_bench/router_user_val_data_v1.csv'
+  routing_data_test: 'data/personaroute_bench/router_user_test_data_v1.csv'
+  llm_data: 'data/personaroute_bench/LLM_Descriptions_large.json'
+  llm_embedding_data: 'data/personaroute_bench/llm_description_embedding_large.pkl'
 
 model_path:
   save_model_path: 'saved_models/personalizedrouter/personalizedrouter.pt'
