@@ -1,0 +1,84 @@
+# ============================================================
+# ClawBot Router Configuration
+# ============================================================
+
+serve:
+  host: "0.0.0.0"
+  port: 8000
+  show_model_prefix: true  # Add [model_name] prefix to responses
+
+# Routing Strategy
+# Options: random, round_robin, rules, llm, llmrouter
+router:
+  strategy: llm
+  provider: nvidia
+  base_url: https://integrate.api.nvidia.com/v1
+  model: meta/llama-3.1-8b-instruct  # Small model for routing decisions
+
+api_keys:
+  nvidia:
+    - nvapi-xxx...  # Replace with your NVIDIA API key(s)
+  openai: ${OPENAI_API_KEY}
+  anthropic: ${ANTHROPIC_API_KEY}
+
+# LLM Backend Configuration
+llms:
+  llama-3.1-8b:
+    description: "Fast responses, daily chat"
+    provider: nvidia
+    model: meta/llama-3.1-8b-instruct
+    base_url: https://integrate.api.nvidia.com/v1
+    input_price: 0.2
+    output_price: 0.2
+    max_tokens: 1024
+    context_limit: 128000
+
+  mistral-7b:
+    description: "Instruction following, structured output, fast responses"
+    provider: nvidia
+    model: mistralai/mistral-7b-instruct-v0.3
+    base_url: https://integrate.api.nvidia.com/v1
+    input_price: 0.2
+    output_price: 0.2
+    max_tokens: 1024
+    context_limit: 32768
+
+  mixtral-8x22b:
+    description: "Instruction following, structured output"
+    provider: nvidia
+    model: mistralai/mixtral-8x22b-instruct-v0.1
+    base_url: https://integrate.api.nvidia.com/v1
+    input_price: 1.2
+    output_price: 1.2
+    max_tokens: 1024
+    context_limit: 65536
+
+  llama3-70b:
+    description: "Complex reasoning, deep analysis"
+    provider: nvidia
+    model: meta/llama3-70b-instruct
+    base_url: https://integrate.api.nvidia.com/v1
+    input_price: 0.9
+    output_price: 0.9
+    max_tokens: 1024
+    context_limit: 8192
+
+  mixtral-8x7b:
+    description: "Instruction following, structured output, fast responses"
+    provider: nvidia
+    model: mistralai/mixtral-8x7b-instruct-v0.1
+    base_url: https://integrate.api.nvidia.com/v1
+    input_price: 0.6
+    output_price: 0.6
+    max_tokens: 1024
+    context_limit: 32768
+
+  llama-3.3-nemotron-super-49b-v1:
+    description: "Code generation, technical Q&A, complex reasoning"
+    provider: nvidia
+    model: nvidia/llama-3.3-nemotron-super-49b-v1
+    base_url: https://integrate.api.nvidia.com/v1
+    input_price: 0.9
+    output_price: 0.9
+    max_tokens: 1024
+    context_limit: 32768
