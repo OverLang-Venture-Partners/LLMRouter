@@ -1,0 +1,87 @@
+# ============================================================
+# LLMRouter Serve 配置
+# ============================================================
+# 启动: llmrouter serve --config configs/serve_example.yaml
+# ============================================================
+
+# 服务设置
+serve:
+  host: "0.0.0.0"
+  port: 8000
+  show_model_prefix: true  # 在回复前显示 [model_name]
+
+# Router 设置
+router:
+  name: randomrouter  # 可选: randomrouter, thresholdrouter, 或自定义
+  config_path: custom_routers/randomrouter/config.yaml
+
+# API Keys
+api_keys:
+  nvidia:
+    - nvapi-xxx...  # 替换为你的 NVIDIA API key
+  openai: ${OPENAI_API_KEY}  # 支持环境变量
+  anthropic: ${ANTHROPIC_API_KEY}
+
+# LLM 后端配置
+llms:
+  # 快速模型
+  llama-3.1-8b:
+    provider: nvidia
+    model: meta/llama-3.1-8b-instruct
+    base_url: https://integrate.api.nvidia.com/v1
+    max_tokens: 1024
+    context_limit: 128000
+    input_price: 0.2
+    output_price: 0.2
+
+  # 强力模型
+  llama3-70b:
+    provider: nvidia
+    model: meta/llama3-70b-instruct
+    base_url: https://integrate.api.nvidia.com/v1
+    max_tokens: 1024
+    context_limit: 8192
+    input_price: 0.9
+    output_price: 0.9
+
+  llama-3.3-nemotron-super-49b-v1:
+    provider: nvidia
+    model: nvidia/llama-3.3-nemotron-super-49b-v1
+    base_url: https://integrate.api.nvidia.com/v1
+    max_tokens: 1024
+    context_limit: 32768
+    input_price: 0.9
+    output_price: 0.9
+
+  # 指令模型
+  mistral-7b:
+    provider: nvidia
+    model: mistralai/mistral-7b-instruct-v0.3
+    base_url: https://integrate.api.nvidia.com/v1
+    max_tokens: 1024
+    context_limit: 32768
+    input_price: 0.2
+    output_price: 0.2
+
+
+# ============================================================
+# OpenClaw 集成
+# ============================================================
+# 在 ~/.openclaw/openclaw.json 添加:
+#
+# {
+#   "models": {
+#     "providers": {
+#       "llmrouter": {
+#         "baseUrl": "http://localhost:8000/v1",
+#         "apiKey": "not-needed",
+#         "models": [{"id": "auto", "name": "LLMRouter"}]
+#       }
+#     }
+#   },
+#   "agents": {
+#     "defaults": {
+#       "model": {"primary": "llmrouter/auto"}
+#     }
+#   }
+# }
