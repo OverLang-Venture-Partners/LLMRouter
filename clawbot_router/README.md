@@ -10,6 +10,54 @@ An OpenAI-compatible API server with intelligent LLM routing capabilities. ClawB
 - **Model Prefix**: Optional model name prefix in responses for debugging
 - **Multi-API Key Support**: Load balancing across multiple API keys
 
+## Prerequisites
+
+### 1. Install Python Dependencies
+
+```bash
+pip install fastapi uvicorn httpx pydantic pyyaml
+```
+
+### 2. Install OpenClaw (Required for Slack/Discord Integration)
+
+If you want to use the gateway feature to connect with Slack, Discord, or other messaging platforms:
+
+```bash
+# Install OpenClaw CLI
+npm install -g openclaw
+
+# Configure Slack bot token
+openclaw config set slack.token "xoxb-your-slack-bot-token"
+
+# Or configure Discord bot token
+openclaw config set discord.token "your-discord-bot-token"
+```
+
+**Note:** If you only need the LLM routing API (without messaging platform integration), you can skip OpenClaw installation and use `--no-gateway` flag.
+
+### 3. Configure OpenClaw to Use ClawBot Router
+
+Edit `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "models": {
+    "providers": {
+      "clawbot": {
+        "baseUrl": "http://localhost:8000/v1",
+        "apiKey": "not-needed",
+        "models": [{"id": "auto", "name": "ClawBot Router"}]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {"primary": "clawbot/auto"}
+    }
+  }
+}
+```
+
 ## Quick Start
 
 ### Starting the Services
@@ -298,9 +346,29 @@ Add to `~/.openclaw/openclaw.json`:
 
 ## Architecture
 
+### Full Integration (with Slack/Discord)
+
+```
+┌──────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│ Slack/Discord│ ──► │  OpenClaw Gateway    │ ──► │  ClawBot Router │
+│    User      │     │  (Port 18789)        │     │  (Port 8000)    │
+└──────────────┘     │  (requires openclaw) │     │                 │
+                     └──────────────────────┘     └────────┬────────┘
+                                                           │
+                              ┌─────────────────┬──────────┼──────────┐
+                              ▼                 ▼          ▼          ▼
+                        ┌──────────┐     ┌──────────┐ ┌──────────┐ ┌──────────┐
+                        │ LLaMA    │     │ Mistral  │ │ Mixtral  │ │ Nemotron │
+                        │ 3.1-8B   │     │ 7B       │ │ 8x22B    │ │ 49B      │
+                        └──────────┘     └──────────┘ └──────────┘ └──────────┘
+```
+
+### Standalone Mode (API only)
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     Client Request                       │
+│            (curl, Python, any OpenAI client)            │
 └─────────────────────────┬───────────────────────────────┘
                           │
                           ▼
@@ -321,6 +389,8 @@ Add to `~/.openclaw/openclaw.json`:
     │ 3.1-8B   │    │ 7B       │    │ 8x22B    │
     └──────────┘    └──────────┘    └──────────┘
 ```
+
+**Note:** OpenClaw Gateway is a separate project. Install it with `npm install -g openclaw` if you need Slack/Discord integration. Use `--no-gateway` flag if you only need the routing API.
 
 ## Directory Structure
 
