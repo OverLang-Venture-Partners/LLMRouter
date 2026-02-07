@@ -62,23 +62,37 @@ show_help() {
     exit 0
 }
 
+# Validate that an option has a value and the value is not another flag.
+require_value() {
+    local opt="$1"
+    local val="${2-}"
+    if [[ -z "$val" || "$val" == -* ]]; then
+        error "Option $opt requires a value"
+        exit 1
+    fi
+}
+
 # Parse command line arguments
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -c|--config)
+                require_value "$1" "${2-}"
                 CONFIG_FILE="$2"
                 shift 2
                 ;;
             -p|--port)
+                require_value "$1" "${2-}"
                 ROUTER_PORT="$2"
                 shift 2
                 ;;
             -r|--router)
+                require_value "$1" "${2-}"
                 ROUTER_NAME="$2"
                 shift 2
                 ;;
             --router-config)
+                require_value "$1" "${2-}"
                 ROUTER_CONFIG="$2"
                 shift 2
                 ;;
@@ -151,10 +165,30 @@ trap cleanup SIGINT SIGTERM
 # Check if port is in use
 check_port() {
     local port=$1
-    if lsof -i :$port >/dev/null 2>&1; then
-        return 0  # Port in use
+
+    if command -v lsof >/dev/null 2>&1; then
+        if lsof -i :"$port" >/dev/null 2>&1; then
+            return 0  # Port in use
+        fi
+        return 1
     fi
-    return 1  # Port available
+
+    if command -v ss >/dev/null 2>&1; then
+        if ss -ltn "sport = :$port" 2>/dev/null | tail -n +2 | grep -q .; then
+            return 0
+        fi
+        return 1
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        if netstat -ltn 2>/dev/null | grep -E "[\\.:]${port}[[:space:]]" >/dev/null 2>&1; then
+            return 0
+        fi
+        return 1
+    fi
+
+    warn "No port check tool found (lsof/ss/netstat); skipping port check"
+    return 1
 }
 
 # Wait for service to start
@@ -197,26 +231,26 @@ main() {
     fi
 
     # Check Router port
-    if check_port $ROUTER_PORT; then
+    if check_port "$ROUTER_PORT"; then
         warn "Port $ROUTER_PORT is in use, stopping old process..."
-        pkill -f "clawbot_router" 2>/dev/null || true
+        pkill -f "python -m clawbot_router" 2>/dev/null || true
         sleep 2
     fi
 
     # Build startup command
-    ROUTER_CMD="python -m clawbot_router --config $CONFIG_FILE --port $ROUTER_PORT"
+    ROUTER_CMD=(python -m clawbot_router --config "$CONFIG_FILE" --port "$ROUTER_PORT")
 
     if [ -n "$ROUTER_NAME" ]; then
-        ROUTER_CMD="$ROUTER_CMD --router $ROUTER_NAME"
+        ROUTER_CMD+=(--router "$ROUTER_NAME")
         info "Using Router: $ROUTER_NAME"
     fi
 
     if [ -n "$ROUTER_CONFIG" ]; then
-        ROUTER_CMD="$ROUTER_CMD --router-config $ROUTER_CONFIG"
+        ROUTER_CMD+=(--router-config "$ROUTER_CONFIG")
     fi
 
     if [ "$NO_PREFIX" = true ]; then
-        ROUTER_CMD="$ROUTER_CMD --no-prefix"
+        ROUTER_CMD+=(--no-prefix)
     fi
 
     # Start ClawBot Router
@@ -224,7 +258,7 @@ main() {
     cd "$SCRIPT_DIR"
 
     # Run using nohup
-    nohup $ROUTER_CMD > "$ROUTER_LOG" 2>&1 &
+    nohup "${ROUTER_CMD[@]}" > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
 
     # Wait for Router to start
@@ -257,8 +291,8 @@ main() {
             info "Starting OpenClaw Gateway..."
 
             # Stop any existing Gateway
-            pkill -9 -f "openclaw-gateway" 2>/dev/null || true
-            pkill -9 -f "openclaw gateway" 2>/dev/null || true
+            pkill -9 -f "openclaw gateway run --bind loopback --port 18789" 2>/dev/null || true
+            pkill -9 -f "openclaw gateway run" 2>/dev/null || true
             sleep 1
 
             nohup openclaw gateway run --bind loopback --port 18789 --force > "$GATEWAY_LOG" 2>&1 &

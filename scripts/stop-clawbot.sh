@@ -14,12 +14,12 @@ echo ""
 
 # Stop ClawBot Router
 echo -n "Stopping ClawBot Router... "
-pkill -f "clawbot_router" 2>/dev/null && echo -e "${GREEN}OK${NC}" || echo -e "${RED}Not running${NC}"
+pkill -f "python -m clawbot_router" 2>/dev/null && echo -e "${GREEN}OK${NC}" || echo -e "${RED}Not running${NC}"
 
 # Stop OpenClaw Gateway
 echo -n "Stopping OpenClaw Gateway... "
-pkill -f "openclaw gateway" 2>/dev/null && echo -e "${GREEN}OK${NC}" || echo -e "${RED}Not running${NC}"
-pkill -f "openclaw-gateway" 2>/dev/null || true
+pkill -f "openclaw gateway run --bind loopback --port 18789" 2>/dev/null && echo -e "${GREEN}OK${NC}" || echo -e "${RED}Not running${NC}"
+pkill -f "openclaw gateway run" 2>/dev/null || true
 
 echo ""
 echo "All services stopped"

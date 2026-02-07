@@ -7,10 +7,13 @@ Supports multiple routing strategies:
 """
 
 import os
-import sys
 import random
+import sys
+import io
+import contextlib
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import Dict, List, Optional, Any
 
 # Handle both relative and direct imports
 try:
@@ -23,8 +26,20 @@ except ImportError:
 # Built-in Strategies
 # ============================================================
 
+def _safe_log(message: Any) -> None:
+    """
+    Print logs safely across terminals with different default encodings.
+    Falls back to ASCII if stdout encoding cannot represent the text.
+    """
+    text = str(message)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", errors="replace").decode("ascii"))
+
+
 def select_by_rules(query: str, models: List[str], rules: List[Dict]) -> str:
-    """Rule-based routing using keywords"""
+    """Rule-based routing using keywords."""
     query_lower = query.lower()
 
     for rule in rules:
@@ -33,7 +48,7 @@ def select_by_rules(query: str, models: List[str], rules: List[Dict]) -> str:
         if model and model in models:
             for keyword in keywords:
                 if keyword.lower() in query_lower:
-                    print(f"[Router] Rule matched: '{keyword}' → {model}")
+                    _safe_log(f"[Router] Rule matched: '{keyword}' -> {model}")
                     return model
 
     # Default model
@@ -43,21 +58,22 @@ def select_by_rules(query: str, models: List[str], rules: List[Dict]) -> str:
     return models[0]
 
 
-def select_by_random(models: List[str], weights: Dict[str, int] = None) -> str:
-    """Random routing with optional weights"""
+def select_by_random(models: List[str], weights: Optional[Dict[str, int]] = None) -> str:
+    """Random routing with optional weights."""
     if weights:
         weighted_list = []
-        for m in models:
-            w = weights.get(m, 1)
-            weighted_list.extend([m] * w)
+        for model_name in models:
+            weight = weights.get(model_name, 1)
+            weighted_list.extend([model_name] * weight)
         return random.choice(weighted_list)
     return random.choice(models)
 
 
 _round_robin_index = 0
 
+
 def select_by_round_robin(models: List[str]) -> str:
-    """Round-robin routing"""
+    """Round-robin routing."""
     global _round_robin_index
     selected = models[_round_robin_index % len(models)]
     _round_robin_index += 1
@@ -65,7 +81,7 @@ def select_by_round_robin(models: List[str]) -> str:
 
 
 async def select_by_llm(query: str, models: List[str], config: ClawBotConfig) -> str:
-    """LLM-based routing using an LLM to decide"""
+    """LLM-based routing using an LLM to decide."""
     router = config.router
     provider = router.provider or "openai"
     base_url = router.base_url or "https://api.openai.com/v1"
@@ -73,10 +89,9 @@ async def select_by_llm(query: str, models: List[str], config: ClawBotConfig) ->
 
     api_key = config.get_api_key(provider)
     if not api_key:
-        print(f"[Router] Warning: No API key for {provider}, using random")
+        _safe_log(f"[Router] Warning: No API key for {provider}, using random")
         return random.choice(models)
 
-    # Build router prompt
     model_descriptions = []
     for name in models:
         llm_config = config.llms.get(name)
@@ -91,11 +106,11 @@ Available models:
 {chr(10).join(model_descriptions)}
 
 Rules:
-1. Simple greetings/daily chat → cheaper models (8b, 9b size)
-2. Q&A/knowledge retrieval → chatqa models
-3. Instruction following/structured output → mistral models
-4. Code generation/technical questions → nemotron or larger models
-5. Complex reasoning/deep analysis → 70b or larger models
+1. Simple greetings/daily chat -> cheaper models (8b, 9b size)
+2. Q&A/knowledge retrieval -> chatqa models
+3. Instruction following/structured output -> mistral models
+4. Code generation/technical questions -> nemotron or larger models
+5. Complex reasoning/deep analysis -> 70b or larger models
 
 IMPORTANT: Only return the model name, nothing else!
 Model names: {', '.join(models)}
@@ -106,35 +121,33 @@ User query: {query}"""
         async with httpx.AsyncClient() as client:
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
 
             body = {
                 "model": model_id,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
+                "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 50,
-                "temperature": 0
+                "temperature": 0,
             }
 
-            resp = await client.post(
+            response = await client.post(
                 f"{base_url}/chat/completions",
                 headers=headers,
                 json=body,
-                timeout=15.0
+                timeout=15.0,
             )
 
-            if resp.status_code != 200:
-                print(f"[Router] LLM API error: {resp.status_code}")
+            if response.status_code != 200:
+                _safe_log(f"[Router] LLM API error: {response.status_code}")
                 return models[0]
 
-            result = resp.json()
+            result = response.json()
             choice = result["choices"][0]["message"]["content"].strip().lower()
 
             # Clean response
             choice = choice.strip('`"\'.,!?\n\r\t ')
-            choice = choice.split('\n')[0]
+            choice = choice.split("\n")[0]
             choice = choice.split()[0] if choice.split() else choice
 
             if choice in models:
@@ -147,8 +160,8 @@ User query: {query}"""
 
             return models[0]
 
-    except Exception as e:
-        print(f"[Router] LLM error: {e}")
+    except Exception as error:  # pragma: no cover - network/runtime dependent
+        _safe_log(f"[Router] LLM error: {error}")
         return models[0]
 
 
@@ -157,103 +170,202 @@ User query: {query}"""
 # ============================================================
 
 class LLMRouterAdapter:
-    """Adapter for LLMRouter ML-based routers"""
+    """Adapter for LLMRouter ML-based routers."""
 
-    def __init__(self, router_name: str, config_path: Optional[str] = None,
-                 model_path: Optional[str] = None):
+    def __init__(
+        self,
+        router_name: str,
+        config_path: Optional[str] = None,
+        model_path: Optional[str] = None,
+    ):
         self.router_name = router_name.lower()
         self.config_path = config_path
         self.model_path = model_path
         self.router = None
+        self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self._load_router()
 
-    def _load_router(self):
-        """Load the LLMRouter router"""
-        # Add LLMRouter to path
-        llmrouter_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    def _resolve_config_path(self) -> Optional[str]:
+        """Resolve config path using explicit value first, then known defaults."""
+        if self.config_path:
+            explicit = self.config_path
+            explicit_abs = (
+                explicit if os.path.isabs(explicit)
+                else os.path.join(self.project_root, explicit)
+            )
+
+            if os.path.exists(explicit):
+                return explicit
+            if os.path.exists(explicit_abs):
+                return explicit_abs
+
+            _safe_log(
+                f"[Router] Warning: Explicit router config not found: {self.config_path}"
+            )
+
+        candidates = [
+            os.path.join(
+                self.project_root,
+                "configs",
+                "model_config_test",
+                f"{self.router_name}.yaml",
+            ),
+            os.path.join(
+                self.project_root,
+                "custom_routers",
+                self.router_name,
+                "config.yaml",
+            ),
+            os.path.join(
+                self.project_root,
+                "configs",
+                "model_config_train",
+                f"{self.router_name}.yaml",
+            ),
+        ]
+
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        return None
+
+    @staticmethod
+    def _call_loader_safely(loader, *args, **kwargs):
+        """
+        Run loader/constructor with a silent retry if terminal encoding breaks
+        on downstream non-ASCII print statements.
+        """
+        try:
+            return loader(*args, **kwargs)
+        except UnicodeEncodeError:
+            with contextlib.redirect_stdout(io.StringIO()):
+                return loader(*args, **kwargs)
+
+    def _load_router(self) -> None:
+        """Load router implementation from LLMRouter registry or custom routers."""
+        llmrouter_root = self.project_root
         if llmrouter_root not in sys.path:
             sys.path.insert(0, llmrouter_root)
 
+        resolved_config = self._resolve_config_path()
+
+        router_registry = {}
+        loader_fn = None
         try:
-            # First try custom_routers (plugin system)
-            if self.router_name == "randomrouter":
-                from custom_routers.randomrouter.router import RandomRouter
-                self.router = RandomRouter(self.config_path)
-                print(f"✅ Loaded custom router: randomrouter")
+            from llmrouter.cli.router_inference import ROUTER_REGISTRY, load_router
+
+            router_registry = ROUTER_REGISTRY
+            loader_fn = load_router
+        except ImportError as error:
+            _safe_log(f"[Router] LLMRouter not available: {error}")
+
+        # Use canonical LLMRouter loader for registry routers.
+        if loader_fn and self.router_name in router_registry:
+            if not resolved_config:
+                _safe_log(
+                    f"[Router] Warning: No config found for '{self.router_name}'. "
+                    "Falling back to random."
+                )
+                self.router = None
                 return
 
-            elif self.router_name == "thresholdrouter":
-                from custom_routers.thresholdrouter.router import ThresholdRouter
-                self.router = ThresholdRouter(self.config_path)
-                print(f"✅ Loaded custom router: thresholdrouter")
+            try:
+                self.router = self._call_loader_safely(
+                    loader_fn,
+                    self.router_name,
+                    resolved_config,
+                    self.model_path,
+                )
+                _safe_log(
+                    f"[Router] Loaded LLMRouter: {self.router_name} "
+                    f"(config: {resolved_config})"
+                )
+                return
+            except Exception as error:
+                _safe_log(
+                    f"[Router] Warning: Failed to load router '{self.router_name}' "
+                    f"from registry: {error}"
+                )
+                self.router = None
                 return
 
-            # Try built-in LLMRouter routers
-            try:
-                from llmrouter.cli.router_inference import ROUTER_REGISTRY, load_router
-
-                if self.router_name in ROUTER_REGISTRY:
-                    if self.config_path:
-                        self.router = load_router(self.router_name, self.config_path, self.model_path)
-                    else:
-                        # Try to instantiate without config
-                        RouterClass = ROUTER_REGISTRY[self.router_name]
-                        self.router = RouterClass()
-                    print(f"✅ Loaded LLMRouter: {self.router_name}")
-                    return
-
-            except ImportError as e:
-                print(f"[Router] LLMRouter not available: {e}")
-
-            # Dynamic import for custom routers
-            try:
-                import importlib
-                module = importlib.import_module(f"custom_routers.{self.router_name}.router")
-                for attr in dir(module):
-                    if "router" in attr.lower() and not attr.startswith("_"):
-                        obj = getattr(module, attr)
-                        if hasattr(obj, "route_single"):
-                            self.router = obj(self.config_path) if self.config_path else obj()
-                            print(f"✅ Loaded custom router: {self.router_name}")
-                            return
-            except ImportError:
-                pass
-
-            print(f"⚠️ Router '{self.router_name}' not found, falling back to random")
-
-        except Exception as e:
-            print(f"⚠️ Failed to load router '{self.router_name}': {e}")
+        # Dynamic import fallback for custom routers outside registry.
+        if not resolved_config:
+            _safe_log(
+                f"[Router] Warning: Router '{self.router_name}' config not found; "
+                "cannot initialize custom router. Falling back to random."
+            )
             self.router = None
+            return
+
+        try:
+            import importlib
+
+            module = importlib.import_module(f"custom_routers.{self.router_name}.router")
+            for attr in dir(module):
+                router_cls = getattr(module, attr)
+                if not isinstance(router_cls, type):
+                    continue
+                if not hasattr(router_cls, "route_single") or not hasattr(router_cls, "route_batch"):
+                    continue
+
+                try:
+                    self.router = self._call_loader_safely(
+                        router_cls,
+                        yaml_path=resolved_config,
+                    )
+                except TypeError:
+                    self.router = self._call_loader_safely(
+                        router_cls,
+                        resolved_config,
+                    )
+
+                _safe_log(
+                    f"[Router] Loaded custom router: {self.router_name} "
+                    f"(config: {resolved_config})"
+                )
+                return
+        except ImportError:
+            pass
+        except Exception as error:
+            _safe_log(f"[Router] Warning: Failed to load custom router '{self.router_name}': {error}")
+            self.router = None
+            return
+
+        _safe_log(
+            f"[Router] Warning: Router '{self.router_name}' not found; falling back to random."
+        )
+        self.router = None
 
     def route(self, query: str, available_models: List[str]) -> str:
-        """Route query to a model"""
+        """Route query to a model."""
+        if not available_models:
+            return "default"
         if self.router is None:
             return random.choice(available_models)
 
         try:
             result = self.router.route_single({"query": query})
 
-            # Extract model name
             model_name = (
-                result.get("model_name") or
-                result.get("predicted_llm") or
-                result.get("predicted_llm_name")
+                result.get("model_name")
+                or result.get("predicted_llm")
+                or result.get("predicted_llm_name")
             )
 
             if model_name and model_name in available_models:
                 return model_name
 
-            # Fuzzy match
             if model_name:
-                for m in available_models:
-                    if model_name.lower() in m.lower() or m.lower() in model_name.lower():
-                        return m
+                for candidate in available_models:
+                    if model_name.lower() in candidate.lower() or candidate.lower() in model_name.lower():
+                        return candidate
 
-            return available_models[0]
+            return random.choice(available_models)
 
-        except Exception as e:
-            print(f"[Router] Error: {e}")
-            return available_models[0]
+        except Exception as error:
+            _safe_log(f"[Router] Error: {error}")
+            return random.choice(available_models)
 
 
 # ============================================================
@@ -261,24 +373,23 @@ class LLMRouterAdapter:
 # ============================================================
 
 class ClawBotRouter:
-    """Main router that supports all strategies"""
+    """Main router that supports all strategies."""
 
     def __init__(self, config: ClawBotConfig):
         self.config = config
         self._llmrouter_adapter: Optional[LLMRouterAdapter] = None
 
-        # Initialize LLMRouter adapter if needed
         if config.router.strategy == "llmrouter":
             router_name = config.router.llmrouter_name
             if router_name:
                 self._llmrouter_adapter = LLMRouterAdapter(
                     router_name=router_name,
                     config_path=config.router.llmrouter_config,
-                    model_path=config.router.llmrouter_model_path
+                    model_path=config.router.llmrouter_model_path,
                 )
 
     async def select_model(self, query: str) -> str:
-        """Select model based on configured strategy"""
+        """Select model based on configured strategy."""
         models = list(self.config.llms.keys())
 
         if not models:
@@ -290,47 +401,45 @@ class ClawBotRouter:
 
         if strategy == "rules":
             selected = select_by_rules(query, models, self.config.router.rules)
-            print(f"[Router] Strategy=rules → {selected}")
+            _safe_log(f"[Router] Strategy=rules -> {selected}")
             return selected
 
-        elif strategy == "random":
+        if strategy == "random":
             selected = select_by_random(models, self.config.router.weights)
-            print(f"[Router] Strategy=random → {selected}")
+            _safe_log(f"[Router] Strategy=random -> {selected}")
             return selected
 
-        elif strategy == "round_robin":
+        if strategy == "round_robin":
             selected = select_by_round_robin(models)
-            print(f"[Router] Strategy=round_robin → {selected}")
+            _safe_log(f"[Router] Strategy=round_robin -> {selected}")
             return selected
 
-        elif strategy == "llmrouter":
+        if strategy == "llmrouter":
             if self._llmrouter_adapter:
                 selected = self._llmrouter_adapter.route(query, models)
-                print(f"[Router] Strategy=llmrouter({self._llmrouter_adapter.router_name}) → {selected}")
+                _safe_log(
+                    f"[Router] Strategy=llmrouter({self._llmrouter_adapter.router_name}) -> {selected}"
+                )
                 return selected
-            else:
-                print(f"[Router] LLMRouter not loaded, falling back to random")
-                return random.choice(models)
-
-        elif strategy == "llm":
-            selected = await select_by_llm(query, models, self.config)
-            print(f"[Router] Strategy=llm → {selected}")
-            return selected
-
-        else:
-            print(f"[Router] Unknown strategy '{strategy}', using random")
+            _safe_log("[Router] LLMRouter not loaded, falling back to random")
             return random.choice(models)
 
-    def get_available_routers(self) -> List[str]:
-        """Get list of available LLMRouter routers"""
-        available = ["rules", "random", "round_robin", "llm"]
+        if strategy == "llm":
+            selected = await select_by_llm(query, models, self.config)
+            _safe_log(f"[Router] Strategy=llm -> {selected}")
+            return selected
 
-        # Add custom routers
+        _safe_log(f"[Router] Unknown strategy '{strategy}', using random")
+        return random.choice(models)
+
+    def get_available_routers(self) -> List[str]:
+        """Get list of available LLMRouter routers."""
+        available = ["rules", "random", "round_robin", "llm"]
         available.extend(["randomrouter", "thresholdrouter"])
 
-        # Try to get LLMRouter built-in routers
         try:
             from llmrouter.cli.router_inference import ROUTER_REGISTRY
+
             available.extend(list(ROUTER_REGISTRY.keys()))
         except ImportError:
             pass
