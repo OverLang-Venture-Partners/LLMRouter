@@ -95,6 +95,39 @@ class MemoryConfig:
 
 
 @dataclass
+class MediaConfig:
+    """
+    Media understanding configuration.
+
+    When enabled, converts images/audio/video to text descriptions using Together AI APIs.
+    The text descriptions are stored in memory alongside the original text query.
+    """
+
+    enabled: bool = False
+
+    # Together AI settings
+    api_key: Optional[str] = None
+    api_key_env: str = "TOGETHER_API_KEY"
+    base_url: str = "https://api.together.xyz/v1"
+
+    # Vision model for images/video frames
+    vision_model: str = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+
+    # Audio transcription model
+    audio_model: str = "openai/whisper-large-v3"
+
+    # Prompts
+    image_prompt: str = "Describe this image concisely in 2-3 sentences."
+    video_prompt: str = "Describe what you see in these video frames."
+
+    # Video settings
+    video_max_frames: int = 4  # Max frames to extract from video
+
+    # Max content length in memory
+    max_description_chars: int = 500
+
+
+@dataclass
 class ClawBotConfig:
     """Main ClawBot configuration"""
     # Server settings
@@ -113,6 +146,9 @@ class ClawBotConfig:
 
     # Routing memory (optional)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+
+    # Media understanding (optional)
+    media: MediaConfig = field(default_factory=MediaConfig)
 
     # Origin metadata (useful for resolving relative paths)
     config_path: Optional[str] = None
@@ -183,6 +219,22 @@ class ClawBotConfig:
             max_query_chars=int(memory_data.get("max_query_chars", default_memory.max_query_chars) or default_memory.max_query_chars),
             max_prompt_chars=int(memory_data.get("max_prompt_chars", default_memory.max_prompt_chars) or default_memory.max_prompt_chars),
             per_user=_parse_bool(memory_data.get("per_user", default_memory.per_user), default_memory.per_user),
+        )
+
+        # Media understanding settings
+        media_data = data.get("media", {}) or {}
+        default_media = MediaConfig()
+        config.media = MediaConfig(
+            enabled=_parse_bool(media_data.get("enabled", default_media.enabled), default_media.enabled),
+            api_key=media_data.get("api_key"),
+            api_key_env=str(media_data.get("api_key_env", default_media.api_key_env) or default_media.api_key_env),
+            base_url=str(media_data.get("base_url", default_media.base_url) or default_media.base_url),
+            vision_model=str(media_data.get("vision_model", default_media.vision_model) or default_media.vision_model),
+            audio_model=str(media_data.get("audio_model", default_media.audio_model) or default_media.audio_model),
+            image_prompt=str(media_data.get("image_prompt", default_media.image_prompt) or default_media.image_prompt),
+            video_prompt=str(media_data.get("video_prompt", default_media.video_prompt) or default_media.video_prompt),
+            video_max_frames=int(media_data.get("video_max_frames", default_media.video_max_frames) or default_media.video_max_frames),
+            max_description_chars=int(media_data.get("max_description_chars", default_media.max_description_chars) or default_media.max_description_chars),
         )
 
         # LLM configurations

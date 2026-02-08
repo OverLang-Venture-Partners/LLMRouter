@@ -31,9 +31,11 @@ except ImportError:
 try:
     from .config import ClawBotConfig, LLMConfig, MODELS_WITHOUT_SYSTEM_ROLE, MODEL_CONTEXT_LIMITS
     from .routers import ClawBotRouter
+    from .media import process_multimodal_content, MediaConfig
 except ImportError:
     from config import ClawBotConfig, LLMConfig, MODELS_WITHOUT_SYSTEM_ROLE, MODEL_CONTEXT_LIMITS
     from routers import ClawBotRouter
+    from media import process_multimodal_content, MediaConfig
 
 
 # ============================================================
@@ -227,6 +229,7 @@ class LLMBackend:
         normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
 
+
         async with httpx.AsyncClient() as client:
             headers = {"Content-Type": "application/json"}
             if api_key:
@@ -282,6 +285,7 @@ class LLMBackend:
             ) as resp:
                 if resp.status_code != 200:
                     error = await resp.aread()
+                    print(f"[Backend Streaming] Error {resp.status_code}: {error.decode()[:200]}")
                     yield f'data: {json.dumps({"error": error.decode()[:200]})}\n\n'
                     return
 
@@ -333,12 +337,37 @@ def create_app(config: ClawBotConfig = None, config_path: str = None) -> FastAPI
     async def chat_completions(request: ChatRequest):
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
-        # Extract user query for routing
+        # Extract user query for routing (with optional media understanding)
         user_query = ""
-        for m in reversed(messages):
-            if m["role"] == "user":
-                user_query = normalize_content(m["content"])[:500]
+        media_description = None
+
+        # Find and process the last user message
+        last_user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i]["role"] == "user":
+                last_user_idx = i
                 break
+
+        if last_user_idx is not None:
+            raw_content = messages[last_user_idx]["content"]
+
+            # Process multimodal content if media is enabled
+            # Supports both OpenAI format (list) and OpenClaw format (string with [media attached:...])
+            if config.media.enabled:
+                # Use together API key as fallback
+                together_key = config.api_keys.get("together")
+                processed_text, media_desc = await process_multimodal_content(
+                    raw_content, config.media, fallback_key=together_key
+                )
+                user_query = processed_text[:500]
+                media_description = media_desc
+                if media_desc:
+                    print(f"[Media] Processed: {media_desc[:80]}...")
+                    # IMPORTANT: Replace the message content with processed text
+                    # so LLM sees the image description instead of [media attached: ...]
+                    messages[last_user_idx]["content"] = processed_text
+            else:
+                user_query = normalize_content(raw_content)[:500]
 
         if not user_query:
             user_query = "general query"
@@ -359,60 +388,64 @@ def create_app(config: ClawBotConfig = None, config_path: str = None) -> FastAPI
                 content_buffer = ""
                 buffered_chunks = []
 
-                stream_gen = await backend.call(
-                    selected_model, messages, request.max_tokens,
-                    request.temperature, stream=True
-                )
-                async for chunk in stream_gen:
-                    if not config.show_model_prefix:
-                        yield chunk
-                        continue
-
-                    # Add model prefix to first content chunk
-                    if "[DONE]" in chunk:
-                        # Flush buffer before DONE
-                        if buffered_chunks and not prefix_sent:
-                            content_buffer = re.sub(r'^\[[\w\-\.]+\]\s*', '', content_buffer)
-                            first = buffered_chunks[0]
-                            try:
-                                data = json.loads(first[6:]) if first.startswith("data: ") else {}
-                                if data.get("choices") and data["choices"][0].get("delta"):
-                                    data["choices"][0]["delta"]["content"] = f"[{selected_model}] " + content_buffer
-                                    yield f"data: {json.dumps(data)}\n\n"
-                            except:
-                                pass
-                        yield chunk
-                    else:
-                        try:
-                            json_str = chunk[6:] if chunk.startswith("data: ") else chunk
-                            data = json.loads(json_str.strip())
-                            cleaned = clean_streaming_chunk(data)
-
-                            if cleaned:
-                                choices = cleaned.get("choices", [])
-                                if choices and "delta" in choices[0]:
-                                    content = choices[0]["delta"].get("content", "")
-
-                                    if not prefix_sent:
-                                        content_buffer += content
-                                        buffered_chunks.append(chunk)
-
-                                        if len(content_buffer) > 30 or (content_buffer and not content_buffer.startswith("[")):
-                                            content_buffer = re.sub(r'^\[[\w\-\.]+\]\s*', '', content_buffer)
-                                            first = buffered_chunks[0]
-                                            first_data = json.loads(first[6:] if first.startswith("data: ") else first)
-                                            if first_data.get("choices") and first_data["choices"][0].get("delta"):
-                                                first_data["choices"][0]["delta"]["content"] = f"[{selected_model}] " + content_buffer
-                                                yield f"data: {json.dumps(first_data)}\n\n"
-                                                prefix_sent = True
-                                                buffered_chunks = []
-                                    else:
-                                        yield f"data: {json.dumps(cleaned)}\n\n"
-                                else:
-                                    if prefix_sent:
-                                        yield f"data: {json.dumps(cleaned)}\n\n"
-                        except:
+                try:
+                    stream_gen = await backend.call(
+                        selected_model, messages, request.max_tokens,
+                        request.temperature, stream=True
+                    )
+                    async for chunk in stream_gen:
+                        if not config.show_model_prefix:
                             yield chunk
+                            continue
+
+                        # Add model prefix to first content chunk
+                        if "[DONE]" in chunk:
+                            # Flush buffer before DONE
+                            if buffered_chunks and not prefix_sent:
+                                content_buffer = re.sub(r'^\[[\w\-\.]+\]\s*', '', content_buffer)
+                                first = buffered_chunks[0]
+                                try:
+                                    data = json.loads(first[6:]) if first.startswith("data: ") else {}
+                                    if data.get("choices") and data["choices"][0].get("delta"):
+                                        data["choices"][0]["delta"]["content"] = f"[{selected_model}] " + content_buffer
+                                        yield f"data: {json.dumps(data)}\n\n"
+                                except:
+                                    pass
+                            yield chunk
+                        else:
+                            try:
+                                json_str = chunk[6:] if chunk.startswith("data: ") else chunk
+                                data = json.loads(json_str.strip())
+                                cleaned = clean_streaming_chunk(data)
+
+                                if cleaned:
+                                    choices = cleaned.get("choices", [])
+                                    if choices and "delta" in choices[0]:
+                                        content = choices[0]["delta"].get("content", "")
+
+                                        if not prefix_sent:
+                                            content_buffer += content
+                                            buffered_chunks.append(chunk)
+
+                                            if len(content_buffer) > 30 or (content_buffer and not content_buffer.startswith("[")):
+                                                content_buffer = re.sub(r'^\[[\w\-\.]+\]\s*', '', content_buffer)
+                                                first = buffered_chunks[0]
+                                                first_data = json.loads(first[6:] if first.startswith("data: ") else first)
+                                                if first_data.get("choices") and first_data["choices"][0].get("delta"):
+                                                    first_data["choices"][0]["delta"]["content"] = f"[{selected_model}] " + content_buffer
+                                                    yield f"data: {json.dumps(first_data)}\n\n"
+                                                    prefix_sent = True
+                                                    buffered_chunks = []
+                                        else:
+                                            yield f"data: {json.dumps(cleaned)}\n\n"
+                                    else:
+                                        if prefix_sent:
+                                            yield f"data: {json.dumps(cleaned)}\n\n"
+                            except:
+                                yield chunk
+                except Exception as e:
+                    print(f"[Stream Error] {type(e).__name__}: {e}")
+                    yield f'data: {json.dumps({"error": str(e)})}\n\n'
 
             return StreamingResponse(generate(), media_type="text/event-stream")
 

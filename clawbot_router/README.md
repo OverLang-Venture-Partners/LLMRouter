@@ -370,6 +370,61 @@ Notes:
 - Currently, memory is only used to augment `router.strategy: llm` (the router LLM prompt gets the retrieved pairs).
 - The first run will download the retriever model if it is not present (requires outbound internet).
 
+Optional media understanding (converts images/audio/video to text descriptions):
+
+```yaml
+media:
+  enabled: true
+  # Uses Together AI API (same key as api_keys.together)
+  api_key_env: "TOGETHER_API_KEY"
+  base_url: "https://api.together.xyz/v1"
+  # Vision model for image/video understanding (Qwen3-VL recommended for serverless)
+  vision_model: "Qwen/Qwen3-VL-8B-Instruct"
+  # Audio transcription model (Whisper)
+  audio_model: "openai/whisper-large-v3"
+  # Prompts
+  image_prompt: "Describe this image concisely in 2-3 sentences."
+  video_prompt: "Describe what you see in these video frames."
+  # Video processing
+  video_max_frames: 4
+  # Max description length
+  max_description_chars: 500
+```
+
+**Media Understanding Pipeline:**
+
+When media understanding is enabled, the router automatically:
+
+1. **Detects media** in incoming messages (supports two formats):
+   - OpenAI multimodal format: `{"type": "image_url", "image_url": {"url": "data:image/..."}}`
+   - OpenClaw format: `[media attached: /path/to/file (mime/type) | optional_url]`
+
+2. **Converts media to text**:
+   - Images → Vision API (Qwen3-VL) → text description
+   - Audio → Whisper API → transcript
+   - Video → Frame extraction + Vision API → description
+
+3. **Replaces media placeholders** in the message content with the generated text description, so the LLM can understand what's in the image/audio/video.
+
+4. **Uses the processed text** for routing decisions (which model to select).
+
+**Example flow:**
+```
+User sends: "[media attached: photo.png (image/png)]"
+           ↓
+Vision API: "The image shows a cat sitting on a couch."
+           ↓
+LLM receives: "[Image: The image shows a cat sitting on a couch.]"
+           ↓
+LLM responds based on the image description
+```
+
+Notes:
+- Image descriptions use Together AI's Qwen3-VL-8B-Instruct vision model (serverless compatible).
+- Audio transcription uses Together AI's Whisper Large v3.
+- Video processing extracts key frames and describes them (requires `opencv-python`).
+- If memory is also enabled, the combined text (original + media description) is stored for retrieval.
+
 LLMRouter strategy config (two equivalent forms are supported):
 
 ```yaml

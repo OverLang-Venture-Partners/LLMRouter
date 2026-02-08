@@ -1,101 +1,94 @@
 # ============================================================
-# ClawBot Router Configuration
+# ClawBot Router Configuration (Together API)
 # ============================================================
 
 serve:
   host: "0.0.0.0"
   port: 8000
-  show_model_prefix: true  # Add [model_name] prefix to responses
+  show_model_prefix: true
 
 # Routing Strategy
 # Options: random, round_robin, rules, llm, llmrouter
 router:
   strategy: llm
-  provider: nvidia
-  base_url: https://integrate.api.nvidia.com/v1
-  model: meta/llama-3.1-8b-instruct  # Small model for routing decisions
+  provider: together
+  base_url: https://api.together.xyz/v1
+  model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"  # small model for routing decisions
 
+# IMPORTANT:
+# For non-nvidia provider in current clawbot config logic, use a SINGLE string key (not list)
 api_keys:
-  nvidia:
-    - nvapi-xxx...  # Replace with your NVIDIA API key(s)
-  openai: ${OPENAI_API_KEY}
-  anthropic: ${ANTHROPIC_API_KEY}
+  # together: ${TOGETHER_API_KEY}
+  # or directly:
+  together: "Your-Together-API-Key"
 
-# Optional: Routing Memory (Retrieval-Augmented Routing)
-# When enabled, ClawBot Router persists (query -> selected model) pairs to disk
-# and retrieves top-k similar past queries to help the `llm` routing strategy.
-memory:
-  enabled: false
-  # JSONL file path for persistence (relative paths resolve against this config file directory)
-  # If omitted/empty, defaults to: ~/.llmrouter/clawbot_memory.jsonl
-  # path: "${HOME}/.llmrouter/clawbot_memory.jsonl"
-  top_k: 10
-  # Dense retriever (Contriever). First run will download this model if not present.
-  retriever_model: "facebook/contriever-msmarco"
-  device: "cpu"          # "cpu" or "cuda"
-  max_length: 256        # tokenizer max length
-  max_query_chars: 500   # truncate stored queries
-  max_prompt_chars: 200  # truncate retrieved queries when inserting into router prompt
-  per_user: false        # if true and request has `user`, retrieve memory for the same user only
-
-# LLM Backend Configuration
+# LLM Backend Configuration (Together-hosted models)
 llms:
   llama-3.1-8b:
-    description: "Fast responses, daily chat"
-    provider: nvidia
-    model: meta/llama-3.1-8b-instruct
-    base_url: https://integrate.api.nvidia.com/v1
-    input_price: 0.2
-    output_price: 0.2
-    max_tokens: 1024
-    context_limit: 128000
+    description: "Fast general chat"
+    provider: together
+    model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+    base_url: https://api.together.xyz/v1
+    input_price: 0.0
+    output_price: 0.0
+    max_tokens: 2048
+    context_limit: 131072
 
-  mistral-7b:
-    description: "Instruction following, structured output, fast responses"
-    provider: nvidia
-    model: mistralai/mistral-7b-instruct-v0.3
-    base_url: https://integrate.api.nvidia.com/v1
-    input_price: 0.2
-    output_price: 0.2
-    max_tokens: 1024
-    context_limit: 32768
+  llama-3.3-70b:
+    description: "Stronger reasoning and instruction following"
+    provider: together
+    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+    base_url: https://api.together.xyz/v1
+    input_price: 0.0
+    output_price: 0.0
+    max_tokens: 2048
+    context_limit: 131072
 
-  mixtral-8x22b:
-    description: "Instruction following, structured output"
-    provider: nvidia
-    model: mistralai/mixtral-8x22b-instruct-v0.1
-    base_url: https://integrate.api.nvidia.com/v1
-    input_price: 1.2
-    output_price: 1.2
-    max_tokens: 1024
-    context_limit: 65536
+  qwen-2.5-7b:
+    description: "Low-latency Qwen model"
+    provider: together
+    model: "Qwen/Qwen2.5-7B-Instruct-Turbo"
+    base_url: https://api.together.xyz/v1
+    input_price: 0.0
+    output_price: 0.0
+    max_tokens: 2048
+    context_limit: 131072
 
-  llama3-70b:
-    description: "Complex reasoning, deep analysis"
-    provider: nvidia
-    model: meta/llama3-70b-instruct
-    base_url: https://integrate.api.nvidia.com/v1
-    input_price: 0.9
-    output_price: 0.9
-    max_tokens: 1024
-    context_limit: 8192
+  qwen-2.5-72b:
+    description: "High-capability Qwen model"
+    provider: together
+    model: "Qwen/Qwen2.5-72B-Instruct"
+    base_url: https://api.together.xyz/v1
+    input_price: 0.0
+    output_price: 0.0
+    max_tokens: 2048
+    context_limit: 131072
 
-  mixtral-8x7b:
-    description: "Instruction following, structured output, fast responses"
-    provider: nvidia
-    model: mistralai/mixtral-8x7b-instruct-v0.1
-    base_url: https://integrate.api.nvidia.com/v1
-    input_price: 0.6
-    output_price: 0.6
-    max_tokens: 1024
-    context_limit: 32768
+# Routing Memory (experimental)
+# Stores query->model routing history for more consistent decisions
+memory:
+  enabled: false
+  path: "${HOME}/.llmrouter/clawbot_memory.jsonl"
+  top_k: 10
+  retriever_model: "facebook/contriever-msmarco"
+  device: "cpu"
 
-  llama-3.3-nemotron-super-49b-v1:
-    description: "Code generation, technical Q&A, complex reasoning"
-    provider: nvidia
-    model: nvidia/llama-3.3-nemotron-super-49b-v1
-    base_url: https://integrate.api.nvidia.com/v1
-    input_price: 0.9
-    output_price: 0.9
-    max_tokens: 1024
-    context_limit: 32768
+# Media Understanding (experimental)
+# Converts images/audio/video to text descriptions for routing and memory
+# Uses Together AI vision and audio APIs
+media:
+  enabled: true
+  # Uses the same together API key from api_keys section
+  api_key_env: "TOGETHER_API_KEY"
+  base_url: "https://api.together.xyz/v1"
+  # Vision model for image/video understanding
+  vision_model: "Qwen/Qwen3-VL-8B-Instruct"
+  # Audio transcription model (Whisper)
+  audio_model: "openai/whisper-large-v3"
+  # Prompts
+  image_prompt: "Describe this image concisely in 2-3 sentences."
+  video_prompt: "Describe what you see in these video frames."
+  # Video processing
+  video_max_frames: 4
+  # Max description length stored in memory
+  max_description_chars: 500
