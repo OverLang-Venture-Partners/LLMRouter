@@ -201,7 +201,7 @@ class LLMSelector:
             data = json.load(f)
         selected_models = [k for k, v in kwargs.items() if v]
         filtered = {k: v for k, v in data.items() if k in selected_models}
-        output_path = os.path.join(os.path.dirname(llm_config_path), "default_llm.json")
+        output_path = os.path.join(os.path.dirname(llm_config_path), "comfyui_llm.json")
         with open(output_path, 'w') as f:
             json.dump(filtered, f, indent=2)
         return (output_path,)
