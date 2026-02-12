@@ -464,7 +464,7 @@ python -m llmrouter.cli.router_chat --router knnrouter --config config.yaml
 LLMRouter offers a powerful **Visual Interface** via [ComfyUI](https://github.com/Comfy-Org/ComfyUI), transforming how you interact with the routing pipeline. Instead of editing YAML files and running terminal scripts, you can drag, drop, and connect nodes to build your workflow.
 
 <div align="center">
-  <img src="ComfyUI/assets/comfyui.png" alt="LLMRouter ComfyUI Interface" width="100%">
+  <img src="assets/comfyui.png" alt="LLMRouter ComfyUI Interface" width="100%">
 </div>
 
 ### Key Highlights
