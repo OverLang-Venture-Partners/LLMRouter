@@ -123,6 +123,15 @@ def _evaluate_only(router_name, config_path):
     from llmrouter.cli.router_inference import load_router as load_router_for_inference
     print(f"{'='*60}\nEvaluating {router_name}...\n{'='*60}")
     router_instance = load_router_for_inference(router_name, config_path)
+
+    if hasattr(router_instance, "query_data_test") and router_instance.query_data_test:
+        for row in router_instance.query_data_test:
+            if isinstance(row, dict) and "choices" in row and isinstance(row["choices"], str):
+                try:
+                    row["choices"] = json.loads(row["choices"])
+                except Exception:
+                    row["choices"] = ast.literal_eval(row["choices"])
+
     batch_results = router_instance.route_batch()
     total = len(batch_results)
     successful = sum(1 for r in batch_results if r.get("success", True))
@@ -221,6 +230,41 @@ class GenerateData:
     def run(self, selected_datasets, charades_ego_path, llms, sample_size, workers, output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
+        # --- Check if generation is needed (Caching) ---
+        try:
+            with open(llms, 'r') as f:
+                llms_content = json.load(f)
+        except Exception:
+            llms_content = {}  # Trigger regeneration if LLM file is invalid
+
+        current_config = {
+            "selected_datasets": selected_datasets,
+            "charades_ego_path": charades_ego_path,
+            "llms_content": llms_content,
+            "sample_size": sample_size,
+        }
+
+        metadata_path = os.path.join(output_dir, "generation_metadata.json")
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path, 'r') as f:
+                    saved_config = json.load(f)
+                
+                if saved_config == current_config:
+                    required_files = [
+                        DATA_FILES.get("query_data_train"),
+                        DATA_FILES.get("query_data_test"),
+                        DATA_FILES.get("routing_data_train"),
+                        DATA_FILES.get("routing_data_test"),
+                        DATA_FILES.get("query_embedding_data"),
+                        DATA_FILES.get("llm_data")
+                    ]
+                    if all(os.path.exists(os.path.join(output_dir, str(fname))) for fname in required_files if fname):
+                        print(f"[LLMRouter] Configuration unchanged and data exists. Skipping regeneration in {output_dir}")
+                        return (output_dir,)
+            except Exception as e:
+                print(f"[LLMRouter] Warning: Metadata check failed ({e}), regenerating data...")
+
         # --- Step 1: Generate query data ---
         dataset_list = selected_datasets.split(',')
         if any("charades_ego" in d for d in dataset_list) and not charades_ego_path:
@@ -268,6 +312,10 @@ class GenerateData:
         emb_output = os.path.join(output_dir, "llm_embeddings.json")
         generate_llm_embeddings(llm_data, emb_output)
         print(f"LLM embeddings saved to {emb_output}")
+
+        # --- Step 5: Save metadata ---
+        with open(metadata_path, 'w') as f:
+            json.dump(current_config, f, indent=2)
 
         print(f"\n{'='*60}\nAll data generated in: {output_dir}\n{'='*60}")
         return (output_dir,)

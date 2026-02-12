@@ -152,6 +152,7 @@
       ],
       "properties": {},
       "widgets_values": [
+        "",
         10,
         10,
         "/home/liangqiy/Desktop/LLMRouter/data/example_data/comfyui_generated"
@@ -193,7 +194,7 @@
     },
     {
       "id": 5,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         100
@@ -207,7 +208,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 6
         }
@@ -254,7 +255,7 @@
     },
     {
       "id": 7,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         400
@@ -268,7 +269,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 8
         }
@@ -315,7 +316,7 @@
     },
     {
       "id": 9,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         700
@@ -329,7 +330,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 10
         }
@@ -376,7 +377,7 @@
     },
     {
       "id": 11,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         1000
@@ -390,7 +391,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 12
         }
@@ -437,7 +438,7 @@
     },
     {
       "id": 13,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         1300
@@ -451,7 +452,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 14
         }
@@ -498,7 +499,7 @@
     },
     {
       "id": 15,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         1600
@@ -512,7 +513,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 16
         }
@@ -559,7 +560,7 @@
     },
     {
       "id": 17,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         1900
@@ -573,7 +574,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 18
         }
@@ -620,7 +621,7 @@
     },
     {
       "id": 19,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         2200
@@ -634,7 +635,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 20
         }
@@ -681,7 +682,7 @@
     },
     {
       "id": 21,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         2500
@@ -695,7 +696,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 22
         }
@@ -742,7 +743,7 @@
     },
     {
       "id": 23,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         2800
@@ -756,7 +757,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 24
         }
@@ -803,7 +804,7 @@
     },
     {
       "id": 25,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         3100
@@ -817,7 +818,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 26
         }
@@ -864,7 +865,7 @@
     },
     {
       "id": 27,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         3400
@@ -878,7 +879,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 28
         }
@@ -925,7 +926,7 @@
     },
     {
       "id": 29,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         3700
@@ -939,7 +940,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 30
         }
@@ -986,7 +987,7 @@
     },
     {
       "id": 31,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         4000
@@ -1000,7 +1001,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 32
         }
@@ -1047,7 +1048,7 @@
     },
     {
       "id": 33,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         4300
@@ -1061,7 +1062,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 34
         }
@@ -1108,7 +1109,7 @@
     },
     {
       "id": 35,
-      "type": "PreviewText",
+      "type": "PreviewAny",
       "pos": [
         1500,
         4600
@@ -1122,7 +1123,7 @@
       "mode": 0,
       "inputs": [
         {
-          "name": "text",
+          "name": "source",
           "type": "STRING",
           "link": 36
         }

@@ -24,7 +24,7 @@ ln -s /path/to/LLMRouter/ComfyUI /path/to/ComfyUI/custom_nodes/LLMRouter
 This allows you to see the pre-configured workflow in the ComfyUI "Workflows" category.
 
 ```bash
-ln -s /path/to/LLMRouter/ComfyUI/workflows/llm_router_template.json /path/to/ComfyUI/user/default/workflows/llm_router_template.json
+ln -s /path/to/LLMRouter/ComfyUI/workflows/llm_router_example.json /path/to/ComfyUI/user/default/workflows/llm_router_example.json
 ```
 
 ### 3. Running the Application
@@ -52,10 +52,10 @@ To use the nodes:
 To use the template:
 1.  Open the ComfyUI web interface in your browser.
 2.  Navigate to the **`Workflows`** category.
-3.  Select `llm_router_template.json`.
+3.  Select `llm_router_example.json`.
 
 This will load a complete workflow connected and ready to run.
 
 <div align="center">
-  <img src="assets/comfyui.png" alt="LLMRouter Template in ComfyUI" width="800">
+  <img src="assets/comfyui.png" alt="LLMRouter Example in ComfyUI" width="800">
 </div>
