@@ -28,7 +28,7 @@ This allows ComfyUI to load the LLMRouter Python backend logic in the ComfyUI "N
 ln -s /path/to/LLMRouter/ComfyUI /path/to/ComfyUI/custom_nodes/LLMRouter
 ```
 
-### 2. Link the Workflow Template (Optional)
+### 2. Link the Workflow Example (Optional)
 This allows you to see the pre-configured workflow in the ComfyUI "Workflows" category.
 
 ```bash
@@ -50,7 +50,7 @@ If you are running ComfyUI on a remote server (e.g., a compute cluster) and wish
 
 ## 🎮 How to Use
 
-### Finding the Nodes
+### Find the Nodes
 To use the nodes:
 1.  Open the ComfyUI web interface.
 2.  Use the **Node Library** sidebar or **Right-click** on the canvas.
@@ -60,7 +60,7 @@ To use the nodes:
     - **Single-Round**: `KNN Router`, `SVM Router`, `MLP Router`, etc.
     - **Multi-Round / Agentic**: Specialized routers for complex tasks.
 
-### Loading the Example
+### Load the Example
 To use the ready-to-run example:
 1.  Click the **`Workflows`** tab (if using a modern UI) or use the **"Load"** button.
 2.  Select **`llm_router_example`**.
