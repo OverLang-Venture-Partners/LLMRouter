@@ -27,7 +27,20 @@ This allows you to see the pre-configured workflow in the ComfyUI "Workflows" ca
 ln -s /path/to/LLMRouter/ComfyUI/workflows/llm_router_template.json /path/to/ComfyUI/user/default/workflows/llm_router_template.json
 ```
 
-## 🚀 How to Use
+### 3. Running the Application
+
+To start the ComfyUI server with the LLMRouter nodes:
+
+```bash
+python /path/to/ComfyUI/main.py
+```
+
+### 4. Remote Access & Port Forwarding
+
+If you are running ComfyUI on a remote server (e.g., a compute cluster) and wish to access the interface locally, you can use SSH tunneling. Once the tunnel is established, access the interface at `http://127.0.0.1:8188`.
+
+
+## 🎮 How to Use
 
 ### Finding the Nodes
 To use the nodes:
