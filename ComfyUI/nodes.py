@@ -31,7 +31,7 @@ DATA_FILES = {
     "routing_data_train": "routing_train.jsonl",
     "routing_data_test": "routing_test.jsonl",
     "query_embedding_data": "query_embeddings_longformer.pt",
-    "llm_data": "filtered_llm.json",
+    "llm_data": "default_llm.json",
 }
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ class LLMSelector:
             data = json.load(f)
         selected_models = [k for k, v in kwargs.items() if v]
         filtered = {k: v for k, v in data.items() if k in selected_models}
-        output_path = os.path.join(os.path.dirname(llm_config_path), "filtered_llm.json")
+        output_path = os.path.join(os.path.dirname(llm_config_path), "default_llm.json")
         with open(output_path, 'w') as f:
             json.dump(filtered, f, indent=2)
         return (output_path,)
