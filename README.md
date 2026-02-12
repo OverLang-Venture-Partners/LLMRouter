@@ -36,7 +36,7 @@
 
 ## 📰 News
 
-- 🖥️ **[2026-02]**: **ComfyUI Interface** - We've released the visual interface for LLMRouter! Now you can visually construct data generation and routing pipelines, drag-and-drop nodes to train routers, and monitor performance in real-time. See [ComfyUI Interface](#comfyui-interface) for details.
+- 🖥️ **[2026-02]**: **ComfyUI Interface** - We've released the visual interface for LLMRouter! Now you can visually construct data generation and routing pipelines, drag-and-drop nodes to train routers, and monitor performance in real-time. See [ComfyUI Interface](#-comfyui-interface) for details.
 
 - 🔗 **[2026-02]**: **OpenClaw Router** - OpenAI-compatible server with OpenClaw integration! We've also released llmrouter-lib v0.3.1. Deploy LLMRouter as a production API server that works seamlessly with Slack, Discord, and other messaging platforms via [OpenClaw](https://github.com/openclaw/openclaw). Features include multimodal understanding (image/audio/video), retrieval-augmented routing memory, streaming support, and all 16+ LLMRouter routing strategies. See [OpenClaw Router Integration](#-openclaw-router-openclaw-integration). For deployment with social platforms like Slack, refer to the [Getting Started Guide](https://www.moltcn.com/start/getting-started.html) for step-by-step setup instructions.
 
@@ -52,8 +52,8 @@
 - [Training a Router](#training-a-router)
 - [Running Inference via a Router](#running-inference)
 - [Interactive Chat Interface with a Router](#interactive-chat-interface)
-- [ComfyUI Interface](#comfyui-interface)
-- [Creating Your Own Routers](#-creating-custom-routers)
+- [ComfyUI Interface](#-comfyui-interface)
+- [Creating Your Own Routers](#-creating-your-own-routers)
 - [Adding Your Own Tasks](#-adding-your-own-tasks)
 - [OpenClaw Router (OpenClaw Integration)](#-openclaw-router-openclaw-integration)
 - [Acknowledgments](#-acknowledgments)
@@ -459,7 +459,7 @@ python -m llmrouter.cli.router_inference --router knnrouter --config config.yaml
 python -m llmrouter.cli.router_chat --router knnrouter --config config.yaml
 ```
 
-## 🖥️ ComfyUI Interface
+## 🎨 ComfyUI Interface
 
 LLMRouter offers a powerful **Visual Interface** via [ComfyUI](https://github.com/Comfy-Org/ComfyUI), transforming how you interact with the routing pipeline. Instead of editing YAML files and running terminal scripts, you can drag, drop, and connect nodes to build your workflow.
 
@@ -474,7 +474,7 @@ LLMRouter offers a powerful **Visual Interface** via [ComfyUI](https://github.co
 - **Real-Time Monitoring**: Track the status of query generation, embedding extraction, and model training with instant visual feedback.
 - **Modular Design**: Custom construct your pipeline by dragging, dropping, and connecting nodes for Datasets, LLMs, and Routers.
 
-### 🛠️ Installation & Setup
+### Installation & Setup
 
 Prerequisites: You must have [ComfyUI](https://github.com/Comfy-Org/ComfyUI) installed.
 
@@ -506,7 +506,7 @@ python /path/to/ComfyUI/main.py
 
 If you are running ComfyUI on a remote server (e.g., a compute cluster) and wish to access the interface locally, you can use SSH tunneling. Once the tunnel is established, access the interface at `http://127.0.0.1:8188`.
 
-### 🎮 Using the ComfyUI Interface
+### Using the ComfyUI Interface
 
 #### Find the Nodes
 To use the nodes:
