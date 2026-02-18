@@ -60,6 +60,51 @@ class ChatRequest(BaseModel):
 # Message Processing
 # ============================================================
 
+def sanitize_messages_for_bedrock(messages: List[Dict]) -> List[Dict]:
+    """
+    Remove tool_use and tool_result blocks from messages for Bedrock.
+    
+    Bedrock requires toolConfig if any tool blocks are present.
+    Since we don't have the original tool definitions, we strip them out.
+    
+    Args:
+        messages: List of message dicts
+        
+    Returns:
+        Cleaned messages without tool blocks
+    """
+    cleaned = []
+    for msg in messages:
+        content = msg.get("content")
+        
+        # Handle list content (multimodal/tool blocks)
+        if isinstance(content, list):
+            # Filter out tool_use and tool_result blocks
+            filtered_content = [
+                block for block in content
+                if block.get("type") not in ("tool_use", "tool_result")
+            ]
+            
+            # Only include message if it has remaining content
+            if filtered_content:
+                # If only one text block remains, simplify to string
+                if len(filtered_content) == 1 and filtered_content[0].get("type") == "text":
+                    cleaned.append({
+                        "role": msg["role"],
+                        "content": filtered_content[0].get("text", "")
+                    })
+                else:
+                    cleaned.append({
+                        "role": msg["role"],
+                        "content": filtered_content
+                    })
+        else:
+            # String content - keep as is
+            cleaned.append(msg)
+    
+    return cleaned
+
+
 def normalize_content(content: Any) -> str:
     """Convert multimodal content to plain string"""
     if isinstance(content, str):
@@ -335,9 +380,14 @@ class LLMBackend:
         normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
+        # Sanitize messages for Bedrock (remove tool blocks)
+        sanitized = sanitize_messages_for_bedrock(normalized)
+        
+        print(f"[DEBUG Bedrock Sync] Normalized {len(messages)} -> {len(normalized)} -> {len(sanitized)} messages")
+        
         # Build messages for LiteLLM (include full conversation)
         litellm_messages = []
-        for msg in normalized:
+        for msg in sanitized:
             litellm_messages.append({
                 "role": msg["role"],
                 "content": msg["content"]
@@ -407,12 +457,15 @@ class LLMBackend:
         normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Streaming] Normalized {len(messages)} -> {len(normalized)} messages")
+        # Sanitize messages for Bedrock (remove tool blocks)
+        sanitized = sanitize_messages_for_bedrock(normalized)
+        
+        print(f"[DEBUG Bedrock Streaming] Normalized {len(messages)} -> {len(normalized)} -> {len(sanitized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
         # Build messages for LiteLLM (include system prompt in messages)
         litellm_messages = []
-        for msg in normalized:
+        for msg in sanitized:
             litellm_messages.append({
                 "role": msg["role"],
                 "content": msg["content"]
