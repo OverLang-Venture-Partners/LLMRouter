@@ -5,51 +5,63 @@
 llms:
   nova-micro:
     provider: bedrock
-    model: "us.amazon.nova-micro-v1:0"
-    cost:
-      input: 0.035
-      output: 0.14
-    description: "Ultra-cheap routing/triage"
+    model: "bedrock/us.amazon.nova-micro-v1:0"
+    service: "AWS Bedrock"
+    api_endpoint: "bedrock"  # Special marker for Bedrock models
+    input_price: 0.035
+    output_price: 0.14
+    size: "Micro"
+    feature: "Ultra-cheap routing/triage"
     
   nova-2-lite:
     provider: bedrock
-    model: "global.amazon.nova-2-lite-v1:0"
-    cost:
-      input: 0.30
-      output: 2.50
-    description: "Primary workhorse - multimodal, 1M context"
+    model: "bedrock/global.amazon.nova-2-lite-v1:0"
+    service: "AWS Bedrock"
+    api_endpoint: "bedrock"
+    input_price: 0.30
+    output_price: 2.50
+    size: "Lite" 
+    feature: "Primary workhorse - multimodal, 1M context"
     
   nova-pro:
     provider: bedrock
-    model: "us.amazon.nova-pro-v1:0"
-    cost:
-      input: 0.80
-      output: 3.20
-    description: "Reasoning tasks"
+    model: "bedrock/us.amazon.nova-pro-v1:0"
+    service: "AWS Bedrock"
+    api_endpoint: "bedrock"
+    input_price: 0.80
+    output_price: 3.20
+    size: "Pro"
+    feature: "Reasoning tasks"
     
   haiku:
     provider: bedrock
-    model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-    cost:
-      input: 0.80
-      output: 4.00
-    description: "Claude family entry - fast, prompt caching"
+    model: "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    service: "AWS Bedrock"
+    api_endpoint: "bedrock"
+    input_price: 0.80
+    output_price: 4.00
+    size: "Haiku"
+    feature: "Claude family entry - fast, prompt caching"
     
   sonnet:
     provider: bedrock
-    model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    cost:
-      input: 3.00
-      output: 15.00
-    description: "Complex reasoning - long-form writing, architecture"
+    model: "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    service: "AWS Bedrock"
+    api_endpoint: "bedrock"
+    input_price: 3.00
+    output_price: 15.00
+    size: "Sonnet"
+    feature: "Complex reasoning - long-form writing, architecture"
     
   opus:
     provider: bedrock
-    model: "us.anthropic.claude-opus-4-5-20251101-v1:0"
-    cost:
-      input: 15.00
-      output: 75.00
-    description: "Deep think only - maximum reasoning depth"
+    model: "bedrock/us.anthropic.claude-opus-4-5-20251101-v1:0"
+    service: "AWS Bedrock"
+    api_endpoint: "bedrock"
+    input_price: 15.00
+    output_price: 75.00
+    size: "Opus"
+    feature: "Deep think only - maximum reasoning depth"
 
 # Router configuration
 router:
