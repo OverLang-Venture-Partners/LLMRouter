@@ -9,7 +9,7 @@ serve:
 # Router configuration - uses custom Bedrock smart router
 router:
   strategy: bedrock_smart_router
-  config_path: "custom_routers/bedrock_smart_router/config.yaml"
+  config_path: "/home/ubuntu/.openclaw/LLMRouter/custom_routers/bedrock_smart_router/config.yaml"
 
 # No API keys needed - uses IAM role from EC2 instance
 # boto3 automatically uses instance profile credentials
