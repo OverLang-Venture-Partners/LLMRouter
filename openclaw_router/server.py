@@ -348,7 +348,8 @@ class LLMBackend:
             'model': f"bedrock/{llm.model_id}",
             'messages': litellm_messages,
             'max_tokens': adjusted_max,
-            'stream': False
+            'stream': False,
+            'modify_params': True  # Auto-fix message ordering for Bedrock
         }
         
         # Only add temperature (not top_p) to avoid Bedrock parameter conflict
@@ -406,6 +407,9 @@ class LLMBackend:
         normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
+        print(f"[DEBUG Bedrock Streaming] Normalized {len(messages)} -> {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
+        
         # Build messages for LiteLLM (include system prompt in messages)
         litellm_messages = []
         for msg in normalized:
@@ -419,7 +423,8 @@ class LLMBackend:
             'model': f"bedrock/{llm.model_id}",
             'messages': litellm_messages,
             'max_tokens': adjusted_max,
-            'stream': True
+            'stream': True,
+            'modify_params': True  # Auto-fix message ordering for Bedrock
         }
         
         # Only add temperature (not top_p) to avoid Bedrock parameter conflict
@@ -431,11 +436,15 @@ class LLMBackend:
             completion_kwargs['aws_region_name'] = llm.aws_region
         
         try:
+            print(f"[DEBUG Bedrock Streaming] Calling LiteLLM completion...")
             # Call LiteLLM completion with streaming
             response = completion(**completion_kwargs)
             
+            chunk_count = 0
             # Stream chunks in OpenAI format
             for chunk in response:
+                chunk_count += 1
+                
                 if hasattr(chunk, 'choices') and chunk.choices:
                     choice = chunk.choices[0]
                     delta = {}
@@ -460,16 +469,20 @@ class LLMBackend:
                     
                     yield f"data: {json.dumps(chunk_data)}\n\n"
             
+            print(f"[DEBUG Bedrock Streaming] Sent {chunk_count} chunks")
+            
             # Send [DONE] marker
             yield "data: [DONE]\n\n"
+            print(f"[DEBUG Bedrock Streaming] Sent [DONE] marker")
             
         except ImportError as e:
-            if "boto3" in str(e).lower():
-                error_msg = "AWS Bedrock support requires boto3. Install with: pip install boto3"
-            else:
-                error_msg = str(e)
+            error_msg = f"boto3 required: {e}" if "boto3" in str(e).lower() else str(e)
+            print(f"[ERROR Bedrock Streaming] Import error: {error_msg}")
             yield f'data: {json.dumps({"error": error_msg})}\n\n'
         except Exception as e:
+            print(f"[ERROR Bedrock Streaming] {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             yield f'data: {json.dumps({"error": str(e)})}\n\n'
 
 
