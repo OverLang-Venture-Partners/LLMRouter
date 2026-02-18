@@ -444,6 +444,19 @@ class LLMBackend:
         completion_kwargs['tool_choice'] = 'none'
         
         try:
+            # TEMP DEBUG - print every message going to LiteLLM
+            print(f"[DEBUG FINAL SYNC] Sending {len(normalized)} messages to LiteLLM:")
+            for i, msg in enumerate(normalized):
+                content = msg.get('content', '')
+                if isinstance(content, list):
+                    print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}")
+                else:
+                    print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}")
+            
+            # Set LiteLLM to drop unsupported params silently
+            import litellm
+            litellm.drop_params = True
+            
             # Call LiteLLM completion
             response = completion(**completion_kwargs)
             
@@ -568,7 +581,21 @@ class LLMBackend:
         completion_kwargs['tool_choice'] = 'none'
         
         try:
+            # TEMP DEBUG - print every message going to LiteLLM
+            print(f"[DEBUG FINAL] Sending {len(normalized)} messages to LiteLLM:")
+            for i, msg in enumerate(normalized):
+                content = msg.get('content', '')
+                if isinstance(content, list):
+                    print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}")
+                else:
+                    print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}")
+            
             print(f"[DEBUG Bedrock Streaming] Calling LiteLLM completion...")
+            
+            # Set LiteLLM to drop unsupported params silently
+            import litellm
+            litellm.drop_params = True
+            
             # Call LiteLLM completion with streaming
             response = completion(**completion_kwargs)
             
