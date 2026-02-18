@@ -74,7 +74,9 @@ def sanitize_messages_for_bedrock(messages: List[Dict]) -> List[Dict]:
         Cleaned messages without tool blocks
     """
     cleaned = []
-    for msg in messages:
+    removed_count = 0
+    
+    for i, msg in enumerate(messages):
         content = msg.get("content")
         
         # Handle list content (multimodal/tool blocks)
@@ -84,6 +86,13 @@ def sanitize_messages_for_bedrock(messages: List[Dict]) -> List[Dict]:
                 block for block in content
                 if block.get("type") not in ("tool_use", "tool_result")
             ]
+            
+            # Count removed blocks
+            original_len = len(content)
+            filtered_len = len(filtered_content)
+            if original_len != filtered_len:
+                removed_count += (original_len - filtered_len)
+                print(f"[Sanitize] Message {i}: Removed {original_len - filtered_len} tool blocks, kept {filtered_len} blocks")
             
             # Only include message if it has remaining content
             if filtered_content:
@@ -98,9 +107,15 @@ def sanitize_messages_for_bedrock(messages: List[Dict]) -> List[Dict]:
                         "role": msg["role"],
                         "content": filtered_content
                     })
+            else:
+                # Message had ONLY tool blocks - skip it entirely
+                print(f"[Sanitize] Message {i}: Skipped (only tool blocks, no text)")
         else:
             # String content - keep as is
             cleaned.append(msg)
+    
+    if removed_count > 0:
+        print(f"[Sanitize] Total: Removed {removed_count} tool blocks from {len(messages)} messages -> {len(cleaned)} messages")
     
     return cleaned
 
@@ -376,14 +391,34 @@ class LLMBackend:
                 detail="LiteLLM not installed. Install with: pip install litellm"
             )
         
-        # CRITICAL: Sanitize BEFORE normalization to strip tool blocks
-        sanitized_raw = sanitize_messages_for_bedrock(messages)
+        # NUCLEAR OPTION: Force all content to plain text only, strip tool blocks completely
+        def force_text_only(msgs):
+            """Aggressively extract only text content, skip tool blocks entirely"""
+            result = []
+            for msg in msgs:
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # Extract only text blocks
+                    text_parts = [
+                        b.get("text", "") for b in content 
+                        if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+                    ]
+                    text = " ".join(text_parts).strip()
+                    if text:  # Only include if there's actual text content
+                        result.append({"role": msg["role"], "content": text})
+                    # else: skip the message entirely (was pure tool block)
+                elif isinstance(content, str) and content.strip():
+                    result.append({"role": msg["role"], "content": content})
+            return result
         
-        # Then normalize the sanitized messages
-        normalized = normalize_messages(sanitized_raw, llm.model_id)
+        # Apply aggressive text-only extraction
+        text_only = force_text_only(messages)
+        
+        # Then normalize the text-only messages
+        normalized = normalize_messages(text_only, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Sanitized {len(sanitized_raw)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Text-only {len(text_only)} -> Normalized {len(normalized)} messages")
         
         # Build completion kwargs - use normalized messages directly
         completion_kwargs = {
@@ -445,15 +480,63 @@ class LLMBackend:
             yield f'data: {json.dumps({"error": "LiteLLM not installed. Install with: pip install litellm"})}\n\n'
             return
         
-        # CRITICAL: Sanitize BEFORE normalization to strip tool blocks
-        sanitized_raw = sanitize_messages_for_bedrock(messages)
+        print(f"[DEBUG Bedrock Streaming] Received {len(messages)} messages")
         
-        # Then normalize the sanitized messages
-        normalized = normalize_messages(sanitized_raw, llm.model_id)
+        # Debug: Check for tool blocks in original messages
+        tool_block_count = 0
+        for i, msg in enumerate(messages):
+            if isinstance(msg.get("content"), list):
+                for block in msg["content"]:
+                    if isinstance(block, dict) and block.get("type") in ("tool_use", "tool_result"):
+                        tool_block_count += 1
+        
+        if tool_block_count > 0:
+            print(f"[DEBUG Bedrock Streaming] Found {tool_block_count} tool blocks in original messages")
+        
+        # NUCLEAR OPTION: Force all content to plain text only, strip tool blocks completely
+        def force_text_only(msgs):
+            """Aggressively extract only text content, skip tool blocks entirely"""
+            result = []
+            for msg in msgs:
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # Extract only text blocks
+                    text_parts = [
+                        b.get("text", "") for b in content 
+                        if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+                    ]
+                    text = " ".join(text_parts).strip()
+                    if text:  # Only include if there's actual text content
+                        result.append({"role": msg["role"], "content": text})
+                    # else: skip the message entirely (was pure tool block)
+                elif isinstance(content, str) and content.strip():
+                    result.append({"role": msg["role"], "content": content})
+            return result
+        
+        # Apply aggressive text-only extraction
+        text_only = force_text_only(messages)
+        
+        # Then normalize the text-only messages
+        normalized = normalize_messages(text_only, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Sanitized {len(sanitized_raw)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Text-only {len(text_only)} -> Normalized {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
+        
+        # Deep inspection: verify NO tool blocks in final messages
+        def has_tool_blocks(msgs):
+            for msg in msgs:
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") in ("tool_use", "tool_result"):
+                            return True, msg
+            return False, None
+        
+        found, offending = has_tool_blocks(normalized)
+        print(f"[DEBUG Bedrock] Tool blocks present in final messages: {found}")
+        if offending:
+            print(f"[DEBUG Bedrock] CRITICAL: Offending message role={offending['role']}, content={str(offending['content'])[:200]}")
         
         # Build completion kwargs - use normalized messages directly
         completion_kwargs = {
