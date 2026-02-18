@@ -376,27 +376,19 @@ class LLMBackend:
                 detail="LiteLLM not installed. Install with: pip install litellm"
             )
         
-        # Normalize messages
-        normalized = normalize_messages(messages, llm.model_id)
+        # CRITICAL: Sanitize BEFORE normalization to strip tool blocks
+        sanitized_raw = sanitize_messages_for_bedrock(messages)
+        
+        # Then normalize the sanitized messages
+        normalized = normalize_messages(sanitized_raw, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        # Sanitize messages for Bedrock (remove tool blocks)
-        sanitized = sanitize_messages_for_bedrock(normalized)
+        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Sanitized {len(sanitized_raw)} -> Normalized {len(normalized)} messages")
         
-        print(f"[DEBUG Bedrock Sync] Normalized {len(messages)} -> {len(normalized)} -> {len(sanitized)} messages")
-        
-        # Build messages for LiteLLM (include full conversation)
-        litellm_messages = []
-        for msg in sanitized:
-            litellm_messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-        
-        # Build completion kwargs
+        # Build completion kwargs - use normalized messages directly
         completion_kwargs = {
             'model': f"bedrock/{llm.model_id}",
-            'messages': litellm_messages,
+            'messages': normalized,
             'max_tokens': adjusted_max,
             'stream': False,
             'modify_params': True  # Auto-fix message ordering for Bedrock
@@ -453,28 +445,20 @@ class LLMBackend:
             yield f'data: {json.dumps({"error": "LiteLLM not installed. Install with: pip install litellm"})}\n\n'
             return
         
-        # Normalize messages
-        normalized = normalize_messages(messages, llm.model_id)
+        # CRITICAL: Sanitize BEFORE normalization to strip tool blocks
+        sanitized_raw = sanitize_messages_for_bedrock(messages)
+        
+        # Then normalize the sanitized messages
+        normalized = normalize_messages(sanitized_raw, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        # Sanitize messages for Bedrock (remove tool blocks)
-        sanitized = sanitize_messages_for_bedrock(normalized)
-        
-        print(f"[DEBUG Bedrock Streaming] Normalized {len(messages)} -> {len(normalized)} -> {len(sanitized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Sanitized {len(sanitized_raw)} -> Normalized {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
-        # Build messages for LiteLLM (include system prompt in messages)
-        litellm_messages = []
-        for msg in sanitized:
-            litellm_messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-        
-        # Build completion kwargs
+        # Build completion kwargs - use normalized messages directly
         completion_kwargs = {
             'model': f"bedrock/{llm.model_id}",
-            'messages': litellm_messages,
+            'messages': normalized,
             'max_tokens': adjusted_max,
             'stream': True,
             'modify_params': True  # Auto-fix message ordering for Bedrock
