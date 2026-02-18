@@ -27,30 +27,31 @@ class BedrockSmartRouter(MetaRouter):
     """Smart router for Bedrock models with cost optimization and memory."""
     
     def __init__(self, yaml_path: str):
+        # Load config first to get LLM names
+        import yaml
+        with open(yaml_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+        
+        # Get LLM names from config BEFORE calling super().__init__
+        if 'llms' in self.config:
+            self.llm_names = list(self.config['llms'].keys())
+        else:
+            raise ValueError(f"No 'llms' section found in config. Available keys: {list(self.config.keys())}")
+        
         # Use identity model (no ML needed for rule-based routing)
         model = nn.Identity()
+        
+        # Call parent init - this will try to load data via DataLoader
+        # We don't need the data loading, but we need to call super().__init__
         super().__init__(model=model, yaml_path=yaml_path)
         
-        # Debug: print what we have
-        print(f"DEBUG: llm_data type: {type(self.llm_data)}")
-        print(f"DEBUG: llm_data value: {self.llm_data}")
-        print(f"DEBUG: config keys: {self.config.keys() if self.config else 'None'}")
+        # Override llm_data with our config's llms section
+        # This ensures compatibility with any code expecting self.llm_data
+        self.llm_data = self.config.get('llms', {})
         
-        # Get LLM names from config - try multiple approaches
-        if self.llm_data and isinstance(self.llm_data, dict):
-            self.llm_names = list(self.llm_data.keys())
-            print(f"DEBUG: Got llm_names from llm_data: {self.llm_names}")
-        elif hasattr(self, 'config') and self.config:
-            if 'llms' in self.config:
-                self.llm_names = list(self.config['llms'].keys())
-                print(f"DEBUG: Got llm_names from config['llms']: {self.llm_names}")
-            elif 'llm_data' in self.config:
-                self.llm_names = list(self.config['llm_data'].keys())
-                print(f"DEBUG: Got llm_names from config['llm_data']: {self.llm_names}")
-            else:
-                raise ValueError(f"No LLM data found. Config keys: {list(self.config.keys())}")
-        else:
-            raise ValueError("No config or llm_data found")
+        # Validate that we have LLM data
+        if not self.llm_data:
+            raise ValueError(f"No LLM data found in config. Ensure 'llms' section exists in config.yaml")
         
         # Memory system for learning from past routing decisions
         self.memory_enabled = False
