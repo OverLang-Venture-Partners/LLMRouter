@@ -6,12 +6,13 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/.openclaw/LLMRouter
-ExecStart=/home/ubuntu/.openclaw/LLMRouter/llmrouter-env/bin/python -m openclaw_router.server --config /home/ubuntu/.openclaw/LLMRouter/configs/openclaw_bedrock_corrected.yaml
+ExecStart=/home/ubuntu/miniconda3/envs/llmrouter/bin/python -m openclaw_router.server --config /home/ubuntu/.openclaw/LLMRouter/configs/openclaw_bedrock_corrected.yaml
 Restart=always
 RestartSec=10
 Environment=API_KEYS={"bedrock":""}
 Environment=AWS_REGION=us-west-2
 Environment=AWS_DEFAULT_REGION=us-west-2
+Environment=LLMROUTER_PLUGINS=/home/ubuntu/.openclaw/LLMRouter/custom_routers
 
 [Install]
 WantedBy=multi-user.target

@@ -31,7 +31,13 @@ class BedrockSmartRouter(MetaRouter):
         model = nn.Identity()
         super().__init__(model=model, yaml_path=yaml_path)
         
-        self.llm_names = list(self.llm_data.keys())
+        # Get LLM names from config
+        if self.llm_data and isinstance(self.llm_data, dict):
+            self.llm_names = list(self.llm_data.keys())
+        elif hasattr(self, 'config') and self.config and 'llms' in self.config:
+            self.llm_names = list(self.config['llms'].keys())
+        else:
+            raise ValueError("No LLM data found in config. Ensure 'llms' section exists in config.yaml")
         
         # Memory system for learning from past routing decisions
         self.memory_enabled = False
