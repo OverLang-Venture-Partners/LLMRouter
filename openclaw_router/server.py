@@ -426,7 +426,8 @@ class LLMBackend:
             'messages': normalized,
             'max_tokens': adjusted_max,
             'stream': False,
-            'modify_params': True  # Auto-fix message ordering for Bedrock
+            'modify_params': True,  # Auto-fix message ordering for Bedrock
+            'drop_params': True,     # Drop unsupported parameters
         }
         
         # Only add temperature (not top_p) to avoid Bedrock parameter conflict
@@ -436,6 +437,11 @@ class LLMBackend:
         # Add AWS region if specified
         if llm.aws_region:
             completion_kwargs['aws_region_name'] = llm.aws_region
+        
+        # CRITICAL: Tell LiteLLM we're NOT using tools
+        # This prevents it from expecting toolConfig
+        completion_kwargs['tools'] = None
+        completion_kwargs['tool_choice'] = 'none'
         
         try:
             # Call LiteLLM completion
@@ -544,7 +550,8 @@ class LLMBackend:
             'messages': normalized,
             'max_tokens': adjusted_max,
             'stream': True,
-            'modify_params': True  # Auto-fix message ordering for Bedrock
+            'modify_params': True,  # Auto-fix message ordering for Bedrock
+            'drop_params': True,     # Drop unsupported parameters
         }
         
         # Only add temperature (not top_p) to avoid Bedrock parameter conflict
@@ -554,6 +561,11 @@ class LLMBackend:
         # Add AWS region if specified
         if llm.aws_region:
             completion_kwargs['aws_region_name'] = llm.aws_region
+        
+        # CRITICAL: Tell LiteLLM we're NOT using tools
+        # This prevents it from expecting toolConfig
+        completion_kwargs['tools'] = None
+        completion_kwargs['tool_choice'] = 'none'
         
         try:
             print(f"[DEBUG Bedrock Streaming] Calling LiteLLM completion...")
