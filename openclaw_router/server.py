@@ -514,6 +514,14 @@ def create_app(config: OpenClawConfig = None, config_path: str = None) -> FastAP
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatRequest):
+        # DEBUG: Log incoming request
+        print(f"\n[DEBUG] Incoming request:")
+        print(f"  Model: {request.model}")
+        print(f"  Stream: {request.stream}")
+        print(f"  Temperature: {request.temperature}")
+        print(f"  Max tokens: {request.max_tokens}")
+        print(f"  Messages: {len(request.messages)} messages")
+        
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
         # Extract user query for routing (with optional media understanding)
@@ -562,10 +570,13 @@ def create_app(config: OpenClawConfig = None, config_path: str = None) -> FastAP
 
         # Handle streaming
         if request.stream:
+            print(f"[DEBUG] Handling streaming request for model: {selected_model}")
+            
             async def generate():
                 prefix_sent = False
                 content_buffer = ""
                 buffered_chunks = []
+                chunk_count = 0
 
                 try:
                     stream_gen = await backend.call(
@@ -573,6 +584,8 @@ def create_app(config: OpenClawConfig = None, config_path: str = None) -> FastAP
                         request.temperature, stream=True
                     )
                     async for chunk in stream_gen:
+                        chunk_count += 1
+                        
                         if not config.show_model_prefix:
                             yield chunk
                             continue
@@ -625,6 +638,8 @@ def create_app(config: OpenClawConfig = None, config_path: str = None) -> FastAP
                 except Exception as e:
                     print(f"[Stream Error] {type(e).__name__}: {e}")
                     yield f'data: {json.dumps({"error": str(e)})}\n\n'
+                finally:
+                    print(f"[DEBUG] Streaming complete: {chunk_count} chunks sent")
 
             return StreamingResponse(generate(), media_type="text/event-stream")
 
