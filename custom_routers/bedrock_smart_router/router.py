@@ -31,13 +31,26 @@ class BedrockSmartRouter(MetaRouter):
         model = nn.Identity()
         super().__init__(model=model, yaml_path=yaml_path)
         
-        # Get LLM names from config
+        # Debug: print what we have
+        print(f"DEBUG: llm_data type: {type(self.llm_data)}")
+        print(f"DEBUG: llm_data value: {self.llm_data}")
+        print(f"DEBUG: config keys: {self.config.keys() if self.config else 'None'}")
+        
+        # Get LLM names from config - try multiple approaches
         if self.llm_data and isinstance(self.llm_data, dict):
             self.llm_names = list(self.llm_data.keys())
-        elif hasattr(self, 'config') and self.config and 'llms' in self.config:
-            self.llm_names = list(self.config['llms'].keys())
+            print(f"DEBUG: Got llm_names from llm_data: {self.llm_names}")
+        elif hasattr(self, 'config') and self.config:
+            if 'llms' in self.config:
+                self.llm_names = list(self.config['llms'].keys())
+                print(f"DEBUG: Got llm_names from config['llms']: {self.llm_names}")
+            elif 'llm_data' in self.config:
+                self.llm_names = list(self.config['llm_data'].keys())
+                print(f"DEBUG: Got llm_names from config['llm_data']: {self.llm_names}")
+            else:
+                raise ValueError(f"No LLM data found. Config keys: {list(self.config.keys())}")
         else:
-            raise ValueError("No LLM data found in config. Ensure 'llms' section exists in config.yaml")
+            raise ValueError("No config or llm_data found")
         
         # Memory system for learning from past routing decisions
         self.memory_enabled = False
