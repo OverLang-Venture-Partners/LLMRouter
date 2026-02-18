@@ -322,69 +322,67 @@ class LLMBackend:
 
     async def _call_bedrock_sync(self, llm: LLMConfig, messages: List[Dict], max_tokens: int,
                                  temperature: Optional[float]) -> Dict:
-        """Synchronous Bedrock API call using llmrouter.utils.api_calling"""
-        from llmrouter.utils.api_calling import call_api
+        """Synchronous Bedrock API call using LiteLLM"""
+        try:
+            from litellm import completion
+        except ImportError:
+            raise HTTPException(
+                status_code=500,
+                detail="LiteLLM not installed. Install with: pip install litellm"
+            )
         
         # Normalize messages
         normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        # Extract query (last user message) and system prompt
-        query = ""
-        system_prompt = ""
-        
+        # Build messages for LiteLLM (include full conversation)
+        litellm_messages = []
         for msg in normalized:
-            if msg["role"] == "system":
-                system_prompt = msg["content"]
-            elif msg["role"] == "user":
-                query = msg["content"]  # Use last user message
+            litellm_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
         
-        # Build request for call_api
-        request = {
-            "query": query,
-            "model_name": llm.name,
-            "api_name": llm.model_id,
-            "api_endpoint": llm.base_url,  # Not used for Bedrock, but required field
-            "service": "Bedrock",
-            "system_prompt": system_prompt if system_prompt else None,
-            "aws_region": llm.aws_region,
+        # Build completion kwargs
+        completion_kwargs = {
+            'model': f"bedrock/{llm.model_id}",
+            'messages': litellm_messages,
+            'max_tokens': adjusted_max,
+            'stream': False
         }
         
-        # Call API
+        # Only add temperature (not top_p) to avoid Bedrock parameter conflict
+        if temperature is not None:
+            completion_kwargs['temperature'] = temperature
+        
+        # Add AWS region if specified
+        if llm.aws_region:
+            completion_kwargs['aws_region_name'] = llm.aws_region
+        
         try:
-            result = call_api(
-                [request],
-                max_tokens=adjusted_max,
-                temperature=temperature if temperature is not None else 0.7,
-                top_p=1.0,
-                timeout=120.0
-            )[0]
-            
-            # Check for errors
-            if 'error' in result:
-                raise HTTPException(status_code=500, detail=result['error'])
+            # Call LiteLLM completion
+            response = completion(**completion_kwargs)
             
             # Convert to OpenAI format
             return {
-                "id": f"chatcmpl-{llm.name}",
+                "id": response.id if hasattr(response, 'id') else f"chatcmpl-{llm.name}",
                 "object": "chat.completion",
                 "model": llm.model_id,
                 "choices": [{
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": result['response']
+                        "content": response.choices[0].message.content if response.choices else ""
                     },
-                    "finish_reason": "stop"
+                    "finish_reason": response.choices[0].finish_reason if response.choices else "stop"
                 }],
                 "usage": {
-                    "prompt_tokens": result.get('prompt_tokens', 0),
-                    "completion_tokens": result.get('completion_tokens', 0),
-                    "total_tokens": result.get('token_num', 0)
+                    "prompt_tokens": response.usage.prompt_tokens if hasattr(response, 'usage') else 0,
+                    "completion_tokens": response.usage.completion_tokens if hasattr(response, 'usage') else 0,
+                    "total_tokens": response.usage.total_tokens if hasattr(response, 'usage') else 0
                 }
             }
         except ImportError as e:
-            # Handle missing boto3
             if "boto3" in str(e).lower():
                 raise HTTPException(
                     status_code=500,
@@ -421,11 +419,12 @@ class LLMBackend:
             'model': f"bedrock/{llm.model_id}",
             'messages': litellm_messages,
             'max_tokens': adjusted_max,
-            'temperature': temperature if temperature is not None else 0.7,
-            'top_p': 1.0,
-            'timeout': 120.0,
             'stream': True
         }
+        
+        # Only add temperature (not top_p) to avoid Bedrock parameter conflict
+        if temperature is not None:
+            completion_kwargs['temperature'] = temperature
         
         # Add AWS region if specified
         if llm.aws_region:

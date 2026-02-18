@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.12",
+    "lastTouchedAt": "2026-02-18T22:00:00.000Z"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "llmrouter": {
+        "baseUrl": "http://localhost:8000/v1",
+        "apiKey": "dummy-key-not-used",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "bedrock_smart_router",
+            "name": "Bedrock Smart Router (Auto)",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 0.8,
+              "output": 3.2,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 300000,
+            "maxTokens": 5000
+          },
+          {
+            "id": "nova-micro",
+            "name": "Nova Micro (Ultra-cheap)",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0.035,
+              "output": 0.14,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 5000
+          },
+          {
+            "id": "nova-2-lite",
+            "name": "Nova 2 Lite (Workhorse)",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": {
+              "input": 0.3,
+              "output": 2.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 5000
+          },
+          {
+            "id": "nova-pro",
+            "name": "Nova Pro (Reasoning)",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 0.8,
+              "output": 3.2,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 300000,
+            "maxTokens": 5000
+          },
+          {
+            "id": "haiku",
+            "name": "Claude Haiku (Fast)",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 0.8,
+              "output": 4.0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "sonnet",
+            "name": "Claude Sonnet (Complex)",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 3.0,
+              "output": 15.0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "opus",
+            "name": "Claude Opus (Deep Think)",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 15.0,
+              "output": 75.0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "llmrouter/bedrock_smart_router"
+      },
+      "maxConcurrent": 6,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "name": "Main Agent",
+        "workspace": "~/.openclaw/workspace",
+        "agentDir": "~/.openclaw/agents/main/agent",
+        "model": "llmrouter/bedrock_smart_router"
+      }
+    ]
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "controlUi": {
+      "enabled": true,
+      "allowInsecureAuth": true
+    },
+    "auth": {
+      "mode": "token",
+      "token": "your-token-here"
+    }
+  }
+}

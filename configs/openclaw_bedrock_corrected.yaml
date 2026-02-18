@@ -11,8 +11,10 @@ router:
   strategy: bedrock_smart_router
   config_path: "/home/ubuntu/.openclaw/LLMRouter/custom_routers/bedrock_smart_router/config.yaml"
 
-# No API keys needed - uses IAM role from EC2 instance
-# boto3 automatically uses instance profile credentials
+# API keys configuration
+# Bedrock uses IAM role from EC2 instance, but we need empty string for the key
+api_keys:
+  bedrock: ""  # Empty string tells LiteLLM to use IAM authentication
 
 # Bedrock model configurations
 llms:
