@@ -1,11 +1,13 @@
 import asyncio
 import json
+import pytest
 try:
     import websockets
 except ImportError:
     print("Please install: pip install websockets")
     exit(1)
 
+@pytest.mark.asyncio
 async def test_ws():
     uri = "ws://localhost:8000/v1/chat/ws"
     async with websockets.connect(uri) as websocket:

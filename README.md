@@ -118,6 +118,11 @@ pip install -e .
 # RouterR1 is tested with vllm==0.6.3 (torch==2.4.0); the extra pins these versions.
 pip install -e ".[router-r1]"
 
+# Optional: Install with AWS Bedrock support
+pip install -e ".[bedrock]"
+# Or install boto3 directly:
+pip install boto3
+
 # Optional: Install all optional dependencies
 pip install -e ".[all]"
 ```
@@ -126,6 +131,9 @@ pip install -e ".[all]"
 
 ```bash
 pip install llmrouter-lib
+
+# For AWS Bedrock support
+pip install boto3
 ```
 
 ### 🔑 Setting Up API Keys
@@ -136,7 +144,7 @@ LLMRouter requires API keys to make LLM API calls for inference, chat, and data 
 
 #### **Service-Specific Dict Format** (recommended for multiple providers)
 
-Use this format when you have models from different service providers (e.g., NVIDIA, OpenAI, Anthropic) and want to use different API keys for each provider:
+Use this format when you have models from different service providers (e.g., NVIDIA, OpenAI, Anthropic, AWS Bedrock) and want to use different API keys for each provider:
 
 ```bash
 export API_KEYS='{"NVIDIA": "nvidia-key-1,nvidia-key-2", "OpenAI": ["openai-key-1", "openai-key-2"], "Anthropic": "anthropic-key-1"}'
@@ -151,6 +159,7 @@ export API_KEYS='{"NVIDIA": "nvidia-key-1,nvidia-key-2", "OpenAI": ["openai-key-
 - **Service Matching**: The system automatically matches the `service` field from your LLM candidate JSON to select the appropriate API keys
 - **Round-Robin**: Each service maintains its own round-robin counter for load balancing
 - **Error Handling**: If a service is not found in the dict, a clear error message will be raised with available services listed
+- **AWS Bedrock**: For Bedrock models, API keys are not used. Instead, configure AWS credentials via environment variables, credential files, or IAM roles (see [AWS Bedrock Setup](#-aws-bedrock-setup) below)
 
 **Example LLM Candidate JSON with service field:**
 ```json
@@ -164,6 +173,11 @@ export API_KEYS='{"NVIDIA": "nvidia-key-1,nvidia-key-2", "OpenAI": ["openai-key-
     "service": "OpenAI",
     "model": "gpt-4",
     "api_endpoint": "https://api.openai.com/v1"
+  },
+  "claude-3-sonnet": {
+    "service": "Bedrock",
+    "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "aws_region": "us-east-1"
   }
 }
 ```
@@ -191,6 +205,101 @@ export API_KEYS='your-api-key'
 - When using **dict format**, ensure the `service` field in your LLM candidate JSON matches the keys in your `API_KEYS` dict
 - The environment variable must be set before running inference, chat, or data generation commands
 - For persistent setup, add the export command to your shell profile (e.g., `~/.bashrc` or `~/.zshrc`)
+
+### ☁️ AWS Bedrock Setup
+
+LLMRouter supports AWS Bedrock as a service provider, giving you access to foundation models from Anthropic (Claude), Amazon (Titan), Meta (Llama), Mistral, and more through a unified interface.
+
+#### Prerequisites
+
+Install boto3 (AWS SDK for Python):
+```bash
+pip install boto3
+# Or install with LLMRouter:
+pip install -e ".[bedrock]"
+```
+
+#### AWS Credentials Configuration
+
+AWS Bedrock uses standard AWS credential mechanisms. Configure credentials using one of these methods:
+
+**Option 1: Environment Variables** (recommended for development)
+```bash
+export AWS_ACCESS_KEY_ID="your-access-key-id"
+export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
+**Option 2: AWS Credential Files**
+```bash
+# ~/.aws/credentials
+[default]
+aws_access_key_id = your-access-key-id
+aws_secret_access_key = your-secret-access-key
+
+# ~/.aws/config
+[default]
+region = us-east-1
+```
+
+**Option 3: IAM Roles** (automatic when running on AWS infrastructure like EC2, ECS, Lambda)
+
+#### Bedrock Model Configuration
+
+Add Bedrock models to your LLM candidate JSON with `service: "Bedrock"`:
+
+```json
+{
+  "claude-3-sonnet": {
+    "size": "Unknown",
+    "feature": "Claude 3 Sonnet by Anthropic via AWS Bedrock",
+    "input_price": 3.0,
+    "output_price": 15.0,
+    "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "service": "Bedrock",
+    "aws_region": "us-east-1"
+  },
+  "titan-text-express": {
+    "size": "Unknown",
+    "feature": "Amazon Titan Text Express - fast text generation",
+    "input_price": 0.2,
+    "output_price": 0.6,
+    "model": "amazon.titan-text-express-v1",
+    "service": "Bedrock",
+    "aws_region": "us-west-2"
+  }
+}
+```
+
+**Key Fields:**
+- `model`: Bedrock Model ID (e.g., `anthropic.claude-3-sonnet-20240229-v1:0`)
+- `service`: Must be `"Bedrock"` or `"AWS"`
+- `aws_region`: AWS region (optional, defaults to `AWS_DEFAULT_REGION`)
+- `input_price`/`output_price`: Cost per million tokens (USD)
+
+#### Quick Start with Bedrock
+
+```bash
+# 1. Configure AWS credentials
+export AWS_ACCESS_KEY_ID="your-key"
+export AWS_SECRET_ACCESS_KEY="your-secret"
+export AWS_DEFAULT_REGION="us-east-1"
+
+# 2. Run inference with a Bedrock model
+llmrouter infer --router knnrouter \
+  --config configs/bedrock_config.yaml \
+  --query "Explain quantum computing"
+
+# 3. Test Bedrock model availability
+llmrouter infer --router knnrouter \
+  --config configs/bedrock_config.yaml \
+  --query "Hello" --route-only
+```
+
+For more details and examples, see:
+- [AWS Bedrock Credentials Guide](docs/AWS_BEDROCK_CREDENTIALS.md)
+- [Bedrock Examples](examples/bedrock_batch_queries.py)
+- [Mixed Provider Routing](examples/mixed_provider_routing.py)
 
 ### 🌐 Configuring API Endpoints
 
@@ -740,7 +849,9 @@ Follow our **step-by-step walkthrough** in the [Charades-Ego Integration Guide](
 | **Multimodal Understanding** | Process images, audio, and video - convert to text for routing decisions |
 | **Routing Memory** | Persist query→model history; retrieve similar past routes for better decisions |
 | **Streaming Support** | Full streaming responses with optional `[model_name]` prefix |
-| **Multi-Provider** | Route to Together AI, NVIDIA, OpenAI, Anthropic, or local models |
+| **Multi-Provider** | Route to Together AI, NVIDIA, OpenAI, Anthropic, AWS Bedrock, or local models |
+
+> **AWS Bedrock Support**: OpenClaw Router now has full support for AWS Bedrock models! Configure Bedrock models in `configs/openclaw_example.yaml` and use them with all routing strategies. See [OpenClaw + Bedrock Status](docs/OPENCLAW_BEDROCK_STATUS.md) for setup details and examples.
 
 ### Architecture
 
@@ -790,6 +901,17 @@ llms:
     model: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
     base_url: https://api.together.xyz/v1
     description: "Complex reasoning"
+
+  # AWS Bedrock models (requires AWS credentials)
+  claude-3-sonnet:
+    provider: bedrock
+    model: anthropic.claude-3-sonnet-20240229-v1:0
+    description: "Claude 3 Sonnet via AWS Bedrock"
+    aws_region: us-east-1
+    max_tokens: 4096
+    context_limit: 200000
+    input_price: 3.0
+    output_price: 15.0
 ```
 
 **2. Start the server**:

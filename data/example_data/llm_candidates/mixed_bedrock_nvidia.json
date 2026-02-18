@@ -1,0 +1,47 @@
+{
+  "claude-3-sonnet-bedrock": {
+    "size": "Unknown",
+    "feature": "Claude 3 Sonnet by Anthropic via AWS Bedrock - balanced performance and speed for complex tasks with strong reasoning capabilities. Ideal for content generation, analysis, and conversational AI applications.",
+    "input_price": 3.0,
+    "output_price": 15.0,
+    "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "service": "Bedrock",
+    "aws_region": "us-east-1"
+  },
+  "titan-text-express-bedrock": {
+    "size": "Unknown",
+    "feature": "Amazon Titan Text Express via AWS Bedrock - fast and cost-effective text generation model optimized for a wide range of tasks including summarization, Q&A, and content creation.",
+    "input_price": 0.2,
+    "output_price": 0.6,
+    "model": "amazon.titan-text-express-v1",
+    "service": "Bedrock",
+    "aws_region": "us-east-1"
+  },
+  "qwen2.5-7b-instruct": {
+    "size": "7B",
+    "feature": "Qwen2.5-7B-Instruct represents an upgraded version of the Qwen model series, featuring significantly enhanced multilingual capabilities across diverse language tasks. This improved model is competitively priced at $0.30 per million input tokens and $0.30 per million output tokens.",
+    "input_price": 0.20,
+    "output_price": 0.20,
+    "model": "qwen/qwen2.5-7b-instruct",
+    "service": "NVIDIA",
+    "api_endpoint": "https://integrate.api.nvidia.com/v1"
+  },
+  "llama-3.1-8b-instruct": {
+    "size": "8B",
+    "feature": "Llama-3.1-8B-Instruct is Meta's 8-billion parameter model from the advanced Llama-3 series, specifically designed for conversational AI and complex reasoning tasks. This versatile model combines strong performance with reasonable costs at $0.20 per million input tokens and $0.20 per million output tokens.",
+    "input_price": 0.20,
+    "output_price": 0.20,
+    "model": "meta/llama-3.1-8b-instruct",
+    "service": "NVIDIA",
+    "api_endpoint": "https://integrate.api.nvidia.com/v1"
+  },
+  "mistral-7b-instruct-v0.3": {
+    "size": "7B",
+    "feature": "Mistral-7B-Instruct-v0.3 is a fast and efficient 7-billion parameter model specifically designed for instruction-following tasks. This streamlined model provides quick response times and reliable performance at cost-effective pricing of $0.20 per million input and output tokens.",
+    "input_price": 0.20,
+    "output_price": 0.20,
+    "model": "mistralai/mistral-7b-instruct-v0.3",
+    "service": "NVIDIA",
+    "api_endpoint": "https://integrate.api.nvidia.com/v1"
+  }
+}

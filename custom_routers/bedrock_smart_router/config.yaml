@@ -1,0 +1,97 @@
+# Bedrock Smart Router Configuration
+# Cost-aware intelligent routing for AWS Bedrock models with memory learning
+
+# LLM candidates (must match your OpenClaw config)
+llms:
+  nova-micro:
+    provider: bedrock
+    model: "us.amazon.nova-micro-v1:0"
+    cost:
+      input: 0.035
+      output: 0.14
+    description: "Ultra-cheap routing/triage"
+    
+  nova-2-lite:
+    provider: bedrock
+    model: "global.amazon.nova-2-lite-v1:0"
+    cost:
+      input: 0.30
+      output: 2.50
+    description: "Primary workhorse - multimodal, 1M context"
+    
+  nova-pro:
+    provider: bedrock
+    model: "us.amazon.nova-pro-v1:0"
+    cost:
+      input: 0.80
+      output: 3.20
+    description: "Reasoning tasks"
+    
+  haiku:
+    provider: bedrock
+    model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    cost:
+      input: 0.80
+      output: 4.00
+    description: "Claude family entry - fast, prompt caching"
+    
+  sonnet:
+    provider: bedrock
+    model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    cost:
+      input: 3.00
+      output: 15.00
+    description: "Complex reasoning - long-form writing, architecture"
+    
+  opus:
+    provider: bedrock
+    model: "us.anthropic.claude-opus-4-5-20251101-v1:0"
+    cost:
+      input: 15.00
+      output: 75.00
+    description: "Deep think only - maximum reasoning depth"
+
+# Router configuration
+router:
+  name: bedrock_smart_router
+  type: hybrid  # Rules + Memory learning
+  
+  # Complexity thresholds (optional tuning)
+  thresholds:
+    simple_max_words: 10
+    reasoning_min_words: 50
+  
+  # Model selection strategy
+  strategy: cost_optimized  # Prefer cheaper models when possible
+  
+  # Fallback model if routing fails
+  fallback_model: nova-2-lite
+
+# Memory configuration - Learns from routing history
+memory:
+  enabled: true  # Enable memory-based learning
+  path: "~/.llmrouter/bedrock_router_memory.jsonl"
+  
+  # How memory improves routing:
+  # 1. Tracks which models were selected for similar queries
+  # 2. Learns patterns over time (e.g., "explain X" often needs sonnet)
+  # 3. Prioritizes memory suggestions over rules when available
+  # 4. Continuously improves as more queries are processed
+  
+  # Memory will build up patterns like:
+  # - "what is" queries → nova-micro (fast, cheap)
+  # - "analyze the" queries → sonnet (reasoning)
+  # - "write code" queries → nova-2-lite (balanced)
+
+# Training configuration (not used for rule-based router)
+train:
+  enabled: false
+
+# Evaluation configuration
+eval:
+  enabled: true
+  metrics:
+    - accuracy
+    - cost_efficiency
+    - latency
+    - memory_hit_rate  # % of queries using memory vs rules

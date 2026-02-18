@@ -60,5 +60,15 @@ config.local.yaml
 *.tmp
 .cache/
 
+# Testing artifacts
+.hypothesis/
+.pytest_cache/
+
+# Temporary documentation files
+*_SUMMARY.md
+*_RESULTS.md
+MANUAL_TESTING_GUIDE.md
+PROMPT_FORMAT_UPDATE.md
+
 # MkDocs build output
 site/

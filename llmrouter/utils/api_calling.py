@@ -39,6 +39,20 @@ def _count_tokens(text: Optional[str]) -> int:
         _gpt2_tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
 
     return len(_gpt2_tokenizer.encode(text))
+def _is_bedrock_model(service: Optional[str]) -> bool:
+    """
+    Check if the service is AWS Bedrock.
+
+    Args:
+        service: Service provider name (e.g., "Bedrock", "AWS", "NVIDIA")
+
+    Returns:
+        True if service is Bedrock/AWS, False otherwise
+    """
+    if not service:
+        return False
+    return service.lower() in ['bedrock', 'aws']
+
 
 
 def _parse_api_keys(api_keys_env: Optional[str] = None) -> Union[Dict[str, List[str]], List[str]]:
@@ -336,22 +350,17 @@ def call_api(
         start_time = time.time()
         
         try:
-            # Select API key using round-robin
-            # For batch requests, use request index; for single requests, use counter
             # Extract service from request if available (for dict-based API key selection)
             service = req.get('service')
-            selected_api_key = _get_api_key(
-                api_endpoint=req['api_endpoint'],
-                api_name=req['api_name'],
-                api_keys=api_keys,
-                service=service,
-                is_batch=not is_single,
-                request_index=idx
-            )
             
             # Make API call using LiteLLM completion directly
-            # Format: openai/{api_name} tells LiteLLM to use OpenAI-compatible client
-            model_for_litellm = f"openai/{req['api_name']}"
+            # Format model identifier based on service type
+            if _is_bedrock_model(service):
+                # Format: bedrock/{model_id} tells LiteLLM to use Bedrock client
+                model_for_litellm = f"bedrock/{req['api_name']}"
+            else:
+                # Format: openai/{api_name} tells LiteLLM to use OpenAI-compatible client
+                model_for_litellm = f"openai/{req['api_name']}"
 
             # Build messages list with optional system prompt
             messages = []
@@ -359,31 +368,54 @@ def call_api(
                 messages.append({"role": "system", "content": req['system_prompt']})
             messages.append({"role": "user", "content": req['query']})
 
-            # LiteLLM requires a non-empty API key even for local endpoints
-            # Use a dummy value if empty string was provided for localhost
-            api_key_for_litellm = selected_api_key
-            if not api_key_for_litellm:
-                # Check if this is a local endpoint
-                is_local = (
-                    "localhost" in req['api_endpoint'].lower() or 
-                    "127.0.0.1" in req['api_endpoint'] or
-                    req['api_endpoint'].startswith("http://127.0.0.1") or
-                    req['api_endpoint'].startswith("http://localhost")
+            # Build completion kwargs - different parameters for Bedrock vs other providers
+            completion_kwargs = {
+                'model': model_for_litellm,
+                'messages': messages,
+                'max_tokens': max_tokens,
+                'temperature': temperature,
+                'top_p': top_p,
+                'timeout': timeout
+            }
+            
+            if _is_bedrock_model(service):
+                # Bedrock uses AWS credentials (boto3), not API keys
+                # Extract and pass AWS region if specified
+                aws_region = req.get('aws_region')
+                if aws_region:
+                    completion_kwargs['aws_region_name'] = aws_region
+            else:
+                # Non-Bedrock providers: select API key using round-robin
+                # For batch requests, use request index; for single requests, use counter
+                selected_api_key = _get_api_key(
+                    api_endpoint=req['api_endpoint'],
+                    api_name=req['api_name'],
+                    api_keys=api_keys,
+                    service=service,
+                    is_batch=not is_single,
+                    request_index=idx
                 )
-                if is_local:
-                    # Use a dummy value for local endpoints (LiteLLM requirement)
-                    api_key_for_litellm = "local"
+                
+                # LiteLLM requires a non-empty API key even for local endpoints
+                # Use a dummy value if empty string was provided for localhost
+                api_key_for_litellm = selected_api_key
+                if not api_key_for_litellm:
+                    # Check if this is a local endpoint
+                    is_local = (
+                        "localhost" in req['api_endpoint'].lower() or 
+                        "127.0.0.1" in req['api_endpoint'] or
+                        req['api_endpoint'].startswith("http://127.0.0.1") or
+                        req['api_endpoint'].startswith("http://localhost")
+                    )
+                    if is_local:
+                        # Use a dummy value for local endpoints (LiteLLM requirement)
+                        api_key_for_litellm = "local"
+                
+                # Add API key and base URL for non-Bedrock providers
+                completion_kwargs['api_key'] = api_key_for_litellm
+                completion_kwargs['api_base'] = req['api_endpoint']
 
-            response = completion(
-                model=model_for_litellm,
-                messages=messages,
-                api_key=api_key_for_litellm,
-                api_base=req['api_endpoint'],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                timeout=timeout
-            )
+            response = completion(**completion_kwargs)
             
             # Extract response
             response_text = response.choices[0].message.content
@@ -409,12 +441,121 @@ def call_api(
             result['completion_tokens'] = completion_tokens
             result['response_time'] = end_time - start_time
             
+        except ImportError as e:
+            # Handle missing boto3 dependency for Bedrock
+            error_msg = str(e)
+            end_time = time.time()
+            
+            if "boto3" in error_msg.lower() or (_is_bedrock_model(service) and "botocore" in error_msg.lower()):
+                error_msg = (
+                    "AWS Bedrock support requires boto3. Install it with:\n"
+                    "  pip install boto3\n"
+                    "Or install with LLMRouter:\n"
+                    "  pip install llmrouter-lib[bedrock]\n"
+                    f"Original error: {e}"
+                )
+            
+            result['response'] = f"Import Error: {error_msg[:200]}"
+            result['token_num'] = 0
+            result['prompt_tokens'] = 0
+            result['completion_tokens'] = 0
+            result['response_time'] = end_time - start_time
+            result['error'] = error_msg
+            
+        except TimeoutError as e:
+            # Handle API call timeouts
+            error_msg = str(e)
+            end_time = time.time()
+            
+            if _is_bedrock_model(service):
+                error_msg = (
+                    f"Bedrock API call timed out after {timeout} seconds.\n"
+                    "Try:\n"
+                    "1. Increase timeout parameter in call_api()\n"
+                    "2. Check network connectivity to AWS\n"
+                    "3. Try a different AWS region\n"
+                    f"Original error: {e}"
+                )
+            else:
+                error_msg = f"API call timed out after {timeout} seconds. Original error: {e}"
+            
+            result['response'] = f"Timeout Error: {error_msg[:200]}"
+            result['token_num'] = 0
+            result['prompt_tokens'] = 0
+            result['completion_tokens'] = 0
+            result['response_time'] = end_time - start_time
+            result['error'] = error_msg
+            
         except Exception as e:
             error_msg = str(e)
             end_time = time.time()
             
+            # Handle Bedrock-specific errors
+            if _is_bedrock_model(service):
+                error_msg_lower = error_msg.lower()
+                
+                # Check for credential-related errors
+                if any(keyword in error_msg_lower for keyword in ['credentials', 'authentication', 'access denied', 'unauthorized', 'invalid security token', 'expired token']):
+                    error_msg = (
+                        "AWS credentials not found or invalid. Configure credentials using one of:\n"
+                        "1. Environment variables:\n"
+                        "   export AWS_ACCESS_KEY_ID='your-key-id'\n"
+                        "   export AWS_SECRET_ACCESS_KEY='your-secret-key'\n"
+                        "   export AWS_DEFAULT_REGION='us-east-1'\n"
+                        "2. AWS credential file (~/.aws/credentials):\n"
+                        "   [default]\n"
+                        "   aws_access_key_id = your-key-id\n"
+                        "   aws_secret_access_key = your-secret-key\n"
+                        "3. IAM role (when running on AWS infrastructure)\n"
+                        f"\nOriginal error: {e}"
+                    )
+                
+                # Check for region-related errors (check before model errors since region errors may contain "model")
+                elif any(keyword in error_msg_lower for keyword in ['region', 'not available', 'not supported in', 'endpoint']):
+                    aws_region = req.get('aws_region', 'default')
+                    error_msg = (
+                        f"Model may not be available in region '{aws_region}'.\n"
+                        "Try one of:\n"
+                        "1. Use a different region (add 'aws_region' field to model config)\n"
+                        "2. Check model availability: https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html\n"
+                        "3. Request access to the model in AWS Bedrock console\n"
+                        f"\nOriginal error: {e}"
+                    )
+                
+                # Check for invalid model ID errors
+                elif any(keyword in error_msg_lower for keyword in ['model', 'not found', 'does not exist', 'invalid model', 'model id']):
+                    model_id = req.get('api_name', 'unknown')
+                    error_msg = (
+                        f"Bedrock model '{model_id}' not found or not accessible.\n"
+                        "Common Bedrock model IDs:\n"
+                        "  Claude: anthropic.claude-3-sonnet-20240229-v1:0\n"
+                        "  Claude: anthropic.claude-3-haiku-20240307-v1:0\n"
+                        "  Titan: amazon.titan-text-express-v1\n"
+                        "  Llama: meta.llama3-70b-instruct-v1:0\n"
+                        "  Mistral: mistral.mistral-7b-instruct-v0:2\n"
+                        "Check model availability: https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html\n"
+                        f"\nOriginal error: {e}"
+                    )
+                
+                # Check for timeout errors (some may come as generic exceptions)
+                elif 'timeout' in error_msg_lower or 'timed out' in error_msg_lower:
+                    error_msg = (
+                        f"Bedrock API call timed out after {timeout} seconds.\n"
+                        "Try:\n"
+                        "1. Increase timeout parameter in call_api()\n"
+                        "2. Check network connectivity to AWS\n"
+                        "3. Try a different AWS region\n"
+                        f"\nOriginal error: {e}"
+                    )
+                else:
+                    # Generic Bedrock error
+                    error_msg = f"Bedrock API Error: {error_msg}"
+            else:
+                # Non-Bedrock error
+                error_msg = f"API Error: {error_msg}"
+            
             # Add error information
-            result['response'] = f"API Error: {error_msg[:200]}"
+            result['response'] = error_msg[:200] if len(error_msg) > 200 else error_msg
             result['token_num'] = 0
             result['prompt_tokens'] = 0
             result['completion_tokens'] = 0

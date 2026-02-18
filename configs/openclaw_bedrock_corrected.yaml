@@ -1,0 +1,84 @@
+# OpenClaw Bedrock Configuration
+# Corrected configuration for AWS Bedrock with smart routing and memory learning
+
+serve:
+  host: "0.0.0.0"
+  port: 8000
+  show_model_prefix: true
+
+# Router configuration - uses custom Bedrock smart router
+router:
+  strategy: bedrock_smart_router
+  config_path: "custom_routers/bedrock_smart_router/config.yaml"
+
+# No API keys needed - uses IAM role from EC2 instance
+# boto3 automatically uses instance profile credentials
+
+# Bedrock model configurations
+llms:
+  nova-micro:
+    provider: bedrock
+    model: "us.amazon.nova-micro-v1:0"
+    aws_region: "us-west-2"  # Required for Bedrock
+    input_price: 0.035       # Per 1M input tokens
+    output_price: 0.14       # Per 1M output tokens
+    description: "Ultra-cheap routing/triage"
+    
+  nova-2-lite:
+    provider: bedrock
+    model: "global.amazon.nova-2-lite-v1:0"
+    aws_region: "us-west-2"
+    input_price: 0.30
+    output_price: 2.50
+    description: "Primary workhorse - multimodal, 1M context"
+    
+  nova-pro:
+    provider: bedrock
+    model: "us.amazon.nova-pro-v1:0"
+    aws_region: "us-west-2"
+    input_price: 0.80
+    output_price: 3.20
+    description: "Reasoning tasks"
+    
+  haiku:
+    provider: bedrock
+    model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    aws_region: "us-west-2"
+    input_price: 0.80
+    output_price: 4.00
+    cache_read_price: 0.08   # Prompt caching (optional)
+    cache_write_price: 1.00
+    description: "Claude family entry - fast, prompt caching"
+    
+  sonnet:
+    provider: bedrock
+    model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    aws_region: "us-west-2"
+    input_price: 3.00
+    output_price: 15.00
+    cache_read_price: 0.30
+    cache_write_price: 3.75
+    description: "Complex reasoning - long-form writing, architecture"
+    
+  opus:
+    provider: bedrock
+    model: "us.anthropic.claude-opus-4-5-20251101-v1:0"
+    aws_region: "us-west-2"
+    input_price: 15.00
+    output_price: 75.00
+    cache_read_price: 1.50
+    cache_write_price: 18.75
+    description: "Deep think only - maximum reasoning depth"
+
+# Memory configuration for query/response storage (optional)
+memory:
+  enabled: true
+  path: "${HOME}/.llmrouter/openclaw_memory.jsonl"
+  top_k: 10
+  retriever_model: "facebook/contriever-msmarco"
+
+# Media processing configuration (optional)
+media:
+  enabled: true
+  vision_model: "Qwen/Qwen3-VL-8B-Instruct"
+  audio_model: "openai/whisper-large-v3"

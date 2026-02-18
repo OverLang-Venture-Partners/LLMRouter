@@ -200,6 +200,24 @@ def clean_streaming_chunk(chunk: Dict) -> Optional[Dict]:
 
 
 # ============================================================
+# Provider Detection
+# ============================================================
+
+def _is_bedrock_provider(llm_config: LLMConfig) -> bool:
+    """Check if LLM config uses Bedrock provider
+    
+    Args:
+        llm_config: LLM configuration to check
+        
+    Returns:
+        True if provider is Bedrock/AWS, False otherwise
+    """
+    if not llm_config.provider:
+        return False
+    return llm_config.provider.lower() in ['bedrock', 'aws']
+
+
+# ============================================================
 # LLM Backend
 # ============================================================
 
@@ -216,12 +234,21 @@ class LLMBackend:
             raise HTTPException(status_code=404, detail=f"LLM '{llm_name}' not found")
 
         llm_config = self.config.llms[llm_name]
-        api_key = self.config.get_api_key(llm_config.provider, llm_config)
-
-        if stream:
-            return self._call_streaming(llm_config, messages, max_tokens, temperature, api_key)
+        
+        # Route based on provider type
+        if _is_bedrock_provider(llm_config):
+            # Use Bedrock path
+            if stream:
+                return self._call_bedrock_streaming(llm_config, messages, max_tokens, temperature)
+            else:
+                return await self._call_bedrock_sync(llm_config, messages, max_tokens, temperature)
         else:
-            return await self._call_sync(llm_config, messages, max_tokens, temperature, api_key)
+            # Use existing HTTP path for OpenAI-compatible providers
+            api_key = self.config.get_api_key(llm_config.provider, llm_config)
+            if stream:
+                return self._call_streaming(llm_config, messages, max_tokens, temperature, api_key)
+            else:
+                return await self._call_sync(llm_config, messages, max_tokens, temperature, api_key)
 
     async def _call_sync(self, llm: LLMConfig, messages: List[Dict], max_tokens: int,
                          temperature: Optional[float], api_key: str) -> Dict:
@@ -292,6 +319,159 @@ class LLMBackend:
                 async for line in resp.aiter_lines():
                     if line.startswith("data: "):
                         yield line + "\n\n"
+
+    async def _call_bedrock_sync(self, llm: LLMConfig, messages: List[Dict], max_tokens: int,
+                                 temperature: Optional[float]) -> Dict:
+        """Synchronous Bedrock API call using llmrouter.utils.api_calling"""
+        from llmrouter.utils.api_calling import call_api
+        
+        # Normalize messages
+        normalized = normalize_messages(messages, llm.model_id)
+        adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
+        
+        # Extract query (last user message) and system prompt
+        query = ""
+        system_prompt = ""
+        
+        for msg in normalized:
+            if msg["role"] == "system":
+                system_prompt = msg["content"]
+            elif msg["role"] == "user":
+                query = msg["content"]  # Use last user message
+        
+        # Build request for call_api
+        request = {
+            "query": query,
+            "model_name": llm.name,
+            "api_name": llm.model_id,
+            "api_endpoint": llm.base_url,  # Not used for Bedrock, but required field
+            "service": "Bedrock",
+            "system_prompt": system_prompt if system_prompt else None,
+            "aws_region": llm.aws_region,
+        }
+        
+        # Call API
+        try:
+            result = call_api(
+                [request],
+                max_tokens=adjusted_max,
+                temperature=temperature if temperature is not None else 0.7,
+                top_p=1.0,
+                timeout=120.0
+            )[0]
+            
+            # Check for errors
+            if 'error' in result:
+                raise HTTPException(status_code=500, detail=result['error'])
+            
+            # Convert to OpenAI format
+            return {
+                "id": f"chatcmpl-{llm.name}",
+                "object": "chat.completion",
+                "model": llm.model_id,
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": result['response']
+                    },
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": result.get('prompt_tokens', 0),
+                    "completion_tokens": result.get('completion_tokens', 0),
+                    "total_tokens": result.get('token_num', 0)
+                }
+            }
+        except ImportError as e:
+            # Handle missing boto3
+            if "boto3" in str(e).lower():
+                raise HTTPException(
+                    status_code=500,
+                    detail="AWS Bedrock support requires boto3. Install with: pip install boto3"
+                )
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def _call_bedrock_streaming(self, llm: LLMConfig, messages: List[Dict], max_tokens: int,
+                                      temperature: Optional[float]) -> AsyncGenerator:
+        """Streaming Bedrock API call using LiteLLM"""
+        try:
+            # Import LiteLLM for streaming
+            from litellm import completion
+        except ImportError:
+            yield f'data: {json.dumps({"error": "LiteLLM not installed. Install with: pip install litellm"})}\n\n'
+            return
+        
+        # Normalize messages
+        normalized = normalize_messages(messages, llm.model_id)
+        adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
+        
+        # Build messages for LiteLLM (include system prompt in messages)
+        litellm_messages = []
+        for msg in normalized:
+            litellm_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # Build completion kwargs
+        completion_kwargs = {
+            'model': f"bedrock/{llm.model_id}",
+            'messages': litellm_messages,
+            'max_tokens': adjusted_max,
+            'temperature': temperature if temperature is not None else 0.7,
+            'top_p': 1.0,
+            'timeout': 120.0,
+            'stream': True
+        }
+        
+        # Add AWS region if specified
+        if llm.aws_region:
+            completion_kwargs['aws_region_name'] = llm.aws_region
+        
+        try:
+            # Call LiteLLM completion with streaming
+            response = completion(**completion_kwargs)
+            
+            # Stream chunks in OpenAI format
+            for chunk in response:
+                if hasattr(chunk, 'choices') and chunk.choices:
+                    choice = chunk.choices[0]
+                    delta = {}
+                    
+                    if hasattr(choice, 'delta'):
+                        if hasattr(choice.delta, 'role') and choice.delta.role:
+                            delta['role'] = choice.delta.role
+                        if hasattr(choice.delta, 'content') and choice.delta.content:
+                            delta['content'] = choice.delta.content
+                    
+                    finish_reason = getattr(choice, 'finish_reason', None)
+                    
+                    chunk_data = {
+                        "id": f"chatcmpl-{llm.name}",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": delta,
+                            "finish_reason": finish_reason
+                        }]
+                    }
+                    
+                    yield f"data: {json.dumps(chunk_data)}\n\n"
+            
+            # Send [DONE] marker
+            yield "data: [DONE]\n\n"
+            
+        except ImportError as e:
+            if "boto3" in str(e).lower():
+                error_msg = "AWS Bedrock support requires boto3. Install with: pip install boto3"
+            else:
+                error_msg = str(e)
+            yield f'data: {json.dumps({"error": error_msg})}\n\n'
+        except Exception as e:
+            yield f'data: {json.dumps({"error": str(e)})}\n\n'
 
 
 # ============================================================

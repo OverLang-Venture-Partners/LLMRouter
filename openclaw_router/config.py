@@ -42,6 +42,7 @@ class LLMConfig:
     output_price: float = 0.0
     max_tokens: int = 4096
     context_limit: int = 32768
+    aws_region: Optional[str] = None  # AWS region for Bedrock models
 
 
 @dataclass
@@ -252,6 +253,7 @@ class OpenClawConfig:
                 output_price=llm_config.get("output_price", 0.0),
                 max_tokens=llm_config.get("max_tokens", 4096),
                 context_limit=llm_config.get("context_limit", 32768),
+                aws_region=llm_config.get("aws_region"),
             )
 
         return config
