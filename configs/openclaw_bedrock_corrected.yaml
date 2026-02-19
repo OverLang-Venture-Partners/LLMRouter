@@ -6,9 +6,15 @@ serve:
   port: 8000
   show_model_prefix: true
 
-# Router configuration - use random strategy (custom router not loading)
+# Router configuration
+# Options:
+# - smallest_llm: Always route to cheapest model (nova-micro) - best for immediate cost savings
+# - knnrouter: ML-based routing using trained model - requires training data
+# - llmrouter: Use any trained LLMRouter strategy (knnrouter, mlprouter, svmrouter, etc.)
 router:
-  strategy: random
+  strategy: llmrouter
+  llmrouter_name: knnrouter
+  llmrouter_config: configs/model_config_test/knnrouter.yaml
 
 # API keys configuration
 # Bedrock uses IAM role from EC2 instance, but we need empty string for the key

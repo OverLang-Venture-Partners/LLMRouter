@@ -11,7 +11,7 @@ data_path:
   llm_embedding_data: 'data/example_data/llm_candidates/default_llm_embeddings.json'
 
 model_path:
-  load_model_path: 'saved_models/knnrouter/knnrouter.pkl'
+  load_model_path: 'llmrouter/saved_models/knnrouter/knnrouter.pkl'
 
 
 metric:
