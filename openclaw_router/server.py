@@ -64,32 +64,24 @@ class ChatRequest(BaseModel):
 
 def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     """
-    Strip tool_use and tool_result blocks as paired units.
+    Strip tool calls and tool results from OpenClaw messages for Bedrock compatibility.
     
-    When an assistant message has tool_use blocks, we strip them AND
-    skip the following user message if it contains tool_result blocks.
-    This maintains Bedrock's strict conversation structure.
+    OpenClaw uses OpenAI format where:
+    - Tool calls appear in assistant messages (sometimes with minimal text)
+    - Tool results appear as separate messages with role=tool
+    
+    Bedrock only accepts role=user and role=assistant, so we must:
+    - Skip all role=tool messages entirely
+    - Skip assistant messages that are just tool calls with no meaningful text
+    - Strip tool_use/tool_result blocks from list content
     
     Args:
-        messages: List of message dicts
+        messages: List of message dicts from OpenClaw
         
     Returns:
-        Messages with tool blocks removed as paired units
+        Messages with tool-related content removed for Bedrock
     """
     print(f"[Strip Paired] ===== FUNCTION CALLED ===== Starting with {len(messages)} messages", flush=True)
-    
-    # IMMEDIATE DIAGNOSTIC: Check message 72 if it exists
-    if len(messages) > 72:
-        m72 = messages[72]
-        c72 = m72.get('content', '')
-        print(f"[Strip Paired] Message 72 BEFORE processing: role={m72.get('role')} content_type={type(c72).__name__}", flush=True)
-        if isinstance(c72, list):
-            print(f"[Strip Paired] Message 72 is LIST with {len(c72)} blocks", flush=True)
-            for idx, block in enumerate(c72[:5]):  # First 5 blocks
-                if isinstance(block, dict):
-                    print(f"[Strip Paired]   Block {idx}: type={block.get('type')}", flush=True)
-        else:
-            print(f"[Strip Paired] Message 72 is STRING: {str(c72)[:200]}", flush=True)
     
     result = []
     i = 0
@@ -97,49 +89,59 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     
     while i < len(messages):
         msg = messages[i]
+        role = msg.get('role', '')
         content = msg.get('content', '')
         
-        # Debug: log message type
-        if isinstance(content, list):
-            block_types = [b.get('type') for b in content if isinstance(b, dict)]
-            print(f"[Strip Paired] Message {i} ({msg.get('role')}): list with types {block_types}", flush=True)
-        else:
-            print(f"[Strip Paired] Message {i} ({msg.get('role')}): string content", flush=True)
+        # CRITICAL: Skip role=tool messages entirely (OpenAI format tool results)
+        # Bedrock doesn't understand role=tool at all
+        if role == 'tool':
+            print(f"[Strip Paired] SKIPPING role=tool message {i}", flush=True)
+            skipped_count += 1
+            i += 1
+            continue
         
+        # Skip tiny assistant messages that are likely just tool calls
+        # These often appear right before role=tool messages
+        if role == 'assistant' and isinstance(content, str) and len(content.strip()) < 10:
+            # Check if next message is a tool result - if so skip both
+            if i + 1 < len(messages) and messages[i + 1].get('role') == 'tool':
+                print(f"[Strip Paired] SKIPPING assistant+tool pair at {i},{i+1}", flush=True)
+                skipped_count += 2
+                i += 2
+                continue
+        
+        # Handle list content with tool blocks (Anthropic format)
         if isinstance(content, list):
-            # Check if this message has tool_use or tool_result blocks
             has_tool_use = any(b.get('type') == 'tool_use' for b in content if isinstance(b, dict))
             has_tool_result = any(b.get('type') == 'tool_result' for b in content if isinstance(b, dict))
             
+            print(f"[Strip Paired] Message {i} ({role}): list with tool_use={has_tool_use} tool_result={has_tool_result}", flush=True)
+            
+            # Skip messages with tool_result blocks
             if has_tool_result:
-                # Skip entire message - it's a tool result without matching tool use
                 print(f"[Strip Paired] SKIPPING message {i} with tool_result blocks", flush=True)
                 skipped_count += 1
                 i += 1
                 continue
             
+            # For messages with tool_use, extract only text parts
             if has_tool_use:
-                # Extract only text parts, skip the tool_use blocks
                 text_parts = [b.get('text', '') for b in content
                              if isinstance(b, dict) and b.get('type') == 'text' and b.get('text')]
                 text = ' '.join(text_parts).strip()
                 if text:
-                    result.append({'role': msg['role'], 'content': text})
-                    print(f"[Strip Paired] Message {i}: Kept text '{text[:50]}...', stripped tool_use blocks", flush=True)
+                    result.append({'role': role, 'content': text})
+                    print(f"[Strip Paired] Message {i}: Kept text, stripped tool_use blocks", flush=True)
                 else:
-                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use blocks, SKIPPING", flush=True)
+                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use, SKIPPING", flush=True)
                     skipped_count += 1
                 
-                # Skip next message if it's a tool_result response
-                if i + 1 < len(messages):
-                    next_content = messages[i + 1].get('content', '')
-                    if isinstance(next_content, list) and any(
-                        b.get('type') == 'tool_result' for b in next_content if isinstance(b, dict)
-                    ):
-                        print(f"[Strip Paired] SKIPPING message {i+1} with paired tool_result blocks", flush=True)
-                        skipped_count += 1
-                        i += 2  # skip both this and the tool result
-                        continue
+                # Skip next message if it's a tool result
+                if i + 1 < len(messages) and messages[i + 1].get('role') == 'tool':
+                    print(f"[Strip Paired] SKIPPING paired tool result at {i+1}", flush=True)
+                    skipped_count += 1
+                    i += 2
+                    continue
                 
                 i += 1
                 continue
@@ -149,11 +151,12 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
                          if isinstance(b, dict) and b.get('type') == 'text' and b.get('text')]
             text = ' '.join(text_parts).strip()
             if text:
-                result.append({'role': msg['role'], 'content': text})
+                result.append({'role': role, 'content': text})
                 print(f"[Strip Paired] Message {i}: Kept text (no tool blocks)", flush=True)
         
+        # Keep string content if it's not empty
         elif isinstance(content, str) and content.strip():
-            result.append({'role': msg['role'], 'content': content})
+            result.append({'role': role, 'content': content})
             print(f"[Strip Paired] Message {i}: Kept string content", flush=True)
         
         i += 1
