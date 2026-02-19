@@ -622,10 +622,32 @@ class LLMBackend:
         
         print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Converted {len(converted)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
         
+        # Filter out empty or whitespace-only messages
+        safe_messages = []
+        for msg in normalized:
+            content = msg.get('content', '')
+            # Skip if content is empty, whitespace-only, or just a newline
+            if isinstance(content, str):
+                if content.strip():
+                    safe_messages.append(msg)
+                else:
+                    print(f"[Filter Empty] Skipping message with empty/whitespace content: role={msg.get('role')}", flush=True)
+            elif isinstance(content, list):
+                # For list content, keep if it has any non-empty blocks
+                if content:
+                    safe_messages.append(msg)
+                else:
+                    print(f"[Filter Empty] Skipping message with empty list content: role={msg.get('role')}", flush=True)
+            else:
+                # Keep other content types
+                safe_messages.append(msg)
+        
+        print(f"[DEBUG Bedrock Sync] After filtering empty messages: {len(normalized)} -> {len(safe_messages)} messages", flush=True)
+        
         # Build completion kwargs
         completion_kwargs = {
             'model': f"bedrock/{llm.model_id}",
-            'messages': normalized,
+            'messages': safe_messages,
             'max_tokens': adjusted_max,
             'stream': False,
         }
@@ -740,10 +762,37 @@ class LLMBackend:
         print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Converted {len(converted)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
+        # Filter out empty or whitespace-only messages
+        safe_messages = []
+        for msg in normalized:
+            content = msg.get('content', '')
+            # Skip if content is empty, whitespace-only, or just a newline
+            if isinstance(content, str):
+                if content.strip():
+                    safe_messages.append(msg)
+                else:
+                    print(f"[Filter Empty] Skipping message with empty/whitespace content: role={msg.get('role')}", flush=True)
+            elif isinstance(content, list):
+                # For list content, keep if it has any non-empty blocks
+                if content:
+                    safe_messages.append(msg)
+                else:
+                    print(f"[Filter Empty] Skipping message with empty list content: role={msg.get('role')}", flush=True)
+            else:
+                # Keep other content types
+                safe_messages.append(msg)
+        
+        print(f"[DEBUG Bedrock Streaming] After filtering empty messages: {len(normalized)} -> {len(safe_messages)} messages", flush=True)
+        
+        # DIAGNOSTIC: Check message 4 specifically
+        if len(safe_messages) > 4:
+            msg4_content = safe_messages[4].get('content', '')
+            print(f"[MSG4 FINAL] role={safe_messages[4]['role']} content={repr(msg4_content)}", flush=True)
+        
         # Build completion kwargs
         completion_kwargs = {
             'model': f"bedrock/{llm.model_id}",
-            'messages': normalized,
+            'messages': safe_messages,
             'max_tokens': adjusted_max,
             'stream': True,
         }
@@ -768,8 +817,8 @@ class LLMBackend:
         # Let LiteLLM handle tool calls naturally if they're present in the conversation
         
         # TEMP DEBUG - print every message going to LiteLLM BEFORE the call
-        print(f"[DEBUG FINAL] Sending {len(normalized)} messages to LiteLLM:", flush=True)
-        for i, msg in enumerate(normalized):
+        print(f"[DEBUG FINAL] Sending {len(safe_messages)} messages to LiteLLM:", flush=True)
+        for i, msg in enumerate(safe_messages):
             content = msg.get('content', '')
             if isinstance(content, list):
                 print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}", flush=True)
