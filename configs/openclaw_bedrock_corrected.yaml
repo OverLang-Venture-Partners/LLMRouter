@@ -6,10 +6,9 @@ serve:
   port: 8000
   show_model_prefix: true
 
-# Router configuration - uses custom Bedrock smart router
+# Router configuration - use random strategy (custom router not loading)
 router:
-  strategy: bedrock_smart_router
-  config_path: "/home/ubuntu/.openclaw/LLMRouter/custom_routers/bedrock_smart_router/config.yaml"
+  strategy: random
 
 # API keys configuration
 # Bedrock uses IAM role from EC2 instance, but we need empty string for the key

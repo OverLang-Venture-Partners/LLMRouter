@@ -426,8 +426,6 @@ class LLMBackend:
             'messages': normalized,
             'max_tokens': adjusted_max,
             'stream': False,
-            'modify_params': True,  # Auto-fix message ordering for Bedrock
-            'drop_params': True,     # Drop unsupported parameters
         }
         
         # Only add temperature (not top_p) to avoid Bedrock parameter conflict
@@ -563,8 +561,6 @@ class LLMBackend:
             'messages': normalized,
             'max_tokens': adjusted_max,
             'stream': True,
-            'modify_params': True,  # Auto-fix message ordering for Bedrock
-            'drop_params': True,     # Drop unsupported parameters
         }
         
         # Only add temperature (not top_p) to avoid Bedrock parameter conflict
