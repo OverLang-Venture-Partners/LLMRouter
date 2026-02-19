@@ -4,7 +4,7 @@
 serve:
   host: "0.0.0.0"
   port: 8000
-  show_model_prefix: true
+  show_model_prefix: false
 
 # Router configuration
 # Using 'llm' strategy with haiku as the routing LLM
