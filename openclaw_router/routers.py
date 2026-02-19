@@ -99,6 +99,13 @@ async def select_by_llm(
         try:
             from litellm import completion
             
+            # Check for explicit model tags in query (case-insensitive)
+            query_lower = query.lower()
+            for model_name in models:
+                if f"({model_name.lower()})" in query_lower or f"[{model_name.lower()}]" in query_lower:
+                    _safe_log(f"[Router] Tag override: {model_name}")
+                    return model_name
+            
             model_descriptions = []
             for name in models:
                 llm_config = config.llms.get(name)
