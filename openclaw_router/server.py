@@ -76,7 +76,21 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     Returns:
         Messages with tool blocks removed as paired units
     """
-    print(f"[Strip Paired] Starting with {len(messages)} messages")
+    print(f"[Strip Paired] ===== FUNCTION CALLED ===== Starting with {len(messages)} messages", flush=True)
+    
+    # IMMEDIATE DIAGNOSTIC: Check message 72 if it exists
+    if len(messages) > 72:
+        m72 = messages[72]
+        c72 = m72.get('content', '')
+        print(f"[Strip Paired] Message 72 BEFORE processing: role={m72.get('role')} content_type={type(c72).__name__}", flush=True)
+        if isinstance(c72, list):
+            print(f"[Strip Paired] Message 72 is LIST with {len(c72)} blocks", flush=True)
+            for idx, block in enumerate(c72[:5]):  # First 5 blocks
+                if isinstance(block, dict):
+                    print(f"[Strip Paired]   Block {idx}: type={block.get('type')}", flush=True)
+        else:
+            print(f"[Strip Paired] Message 72 is STRING: {str(c72)[:200]}", flush=True)
+    
     result = []
     i = 0
     skipped_count = 0
@@ -88,9 +102,9 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
         # Debug: log message type
         if isinstance(content, list):
             block_types = [b.get('type') for b in content if isinstance(b, dict)]
-            print(f"[Strip Paired] Message {i} ({msg.get('role')}): list with types {block_types}")
+            print(f"[Strip Paired] Message {i} ({msg.get('role')}): list with types {block_types}", flush=True)
         else:
-            print(f"[Strip Paired] Message {i} ({msg.get('role')}): string content")
+            print(f"[Strip Paired] Message {i} ({msg.get('role')}): string content", flush=True)
         
         if isinstance(content, list):
             # Check if this message has tool_use or tool_result blocks
@@ -99,7 +113,7 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
             
             if has_tool_result:
                 # Skip entire message - it's a tool result without matching tool use
-                print(f"[Strip Paired] SKIPPING message {i} with tool_result blocks")
+                print(f"[Strip Paired] SKIPPING message {i} with tool_result blocks", flush=True)
                 skipped_count += 1
                 i += 1
                 continue
@@ -111,9 +125,9 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
                 text = ' '.join(text_parts).strip()
                 if text:
                     result.append({'role': msg['role'], 'content': text})
-                    print(f"[Strip Paired] Message {i}: Kept text '{text[:50]}...', stripped tool_use blocks")
+                    print(f"[Strip Paired] Message {i}: Kept text '{text[:50]}...', stripped tool_use blocks", flush=True)
                 else:
-                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use blocks, SKIPPING")
+                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use blocks, SKIPPING", flush=True)
                     skipped_count += 1
                 
                 # Skip next message if it's a tool_result response
@@ -122,7 +136,7 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
                     if isinstance(next_content, list) and any(
                         b.get('type') == 'tool_result' for b in next_content if isinstance(b, dict)
                     ):
-                        print(f"[Strip Paired] SKIPPING message {i+1} with paired tool_result blocks")
+                        print(f"[Strip Paired] SKIPPING message {i+1} with paired tool_result blocks", flush=True)
                         skipped_count += 1
                         i += 2  # skip both this and the tool result
                         continue
@@ -136,15 +150,15 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
             text = ' '.join(text_parts).strip()
             if text:
                 result.append({'role': msg['role'], 'content': text})
-                print(f"[Strip Paired] Message {i}: Kept text (no tool blocks)")
+                print(f"[Strip Paired] Message {i}: Kept text (no tool blocks)", flush=True)
         
         elif isinstance(content, str) and content.strip():
             result.append({'role': msg['role'], 'content': content})
-            print(f"[Strip Paired] Message {i}: Kept string content")
+            print(f"[Strip Paired] Message {i}: Kept string content", flush=True)
         
         i += 1
     
-    print(f"[Strip Paired] Completed: {len(messages)} -> {len(result)} messages (skipped {skipped_count})")
+    print(f"[Strip Paired] ===== COMPLETED ===== {len(messages)} -> {len(result)} messages (skipped {skipped_count})", flush=True)
     return result
 
 
@@ -587,10 +601,19 @@ class LLMBackend:
             yield f'data: {json.dumps({"error": "LiteLLM not installed. Install with: pip install litellm"})}\n\n'
             return
         
-        print(f"[DEBUG Bedrock Streaming] Received {len(messages)} messages")
+        print(f"[DEBUG Bedrock Streaming] Received {len(messages)} messages", flush=True)
+        
+        # DIAGNOSTIC: Dump message 72 specifically to see its format
+        if len(messages) > 72:
+            m = messages[72]
+            print(f"[MSG72 BEFORE] role={m['role']} type={type(m['content']).__name__} content={repr(str(m['content'])[:500])}", flush=True)
+        
+        print(f"[DEBUG Bedrock Streaming] About to call strip_tool_blocks_paired...", flush=True)
         
         # Strip tool blocks as paired units before sending to Bedrock
         stripped = strip_tool_blocks_paired(messages)
+        
+        print(f"[DEBUG Bedrock Streaming] strip_tool_blocks_paired returned {len(stripped)} messages", flush=True)
         
         # Normalize the stripped messages
         normalized = normalize_messages(stripped, llm.model_id)
