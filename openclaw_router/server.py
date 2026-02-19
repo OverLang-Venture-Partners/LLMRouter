@@ -252,6 +252,9 @@ def clean_streaming_chunk(chunk: Dict) -> Optional[Dict]:
                     cleaned_delta["role"] = delta["role"]
                 if "content" in delta:
                     cleaned_delta["content"] = delta["content"]
+                # CRITICAL: Preserve tool_calls in delta
+                if "tool_calls" in delta:
+                    cleaned_delta["tool_calls"] = delta["tool_calls"]
                 cleaned_choice["delta"] = cleaned_delta
         else:
             cleaned_choice["delta"] = {}
@@ -590,6 +593,10 @@ class LLMBackend:
                             print(f"[DEBUG Bedrock] Detected tool_calls in delta: {delta['tool_calls']}")
                     
                     finish_reason = getattr(choice, 'finish_reason', None)
+                    
+                    # Log finish_reason when present
+                    if finish_reason:
+                        print(f"[DEBUG Bedrock Chunk {chunk_count}] finish_reason={finish_reason}")
                     
                     chunk_data = {
                         "id": f"chatcmpl-{llm.name}",
