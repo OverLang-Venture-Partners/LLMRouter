@@ -76,12 +76,21 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     Returns:
         Messages with tool blocks removed as paired units
     """
+    print(f"[Strip Paired] Starting with {len(messages)} messages")
     result = []
     i = 0
+    skipped_count = 0
     
     while i < len(messages):
         msg = messages[i]
         content = msg.get('content', '')
+        
+        # Debug: log message type
+        if isinstance(content, list):
+            block_types = [b.get('type') for b in content if isinstance(b, dict)]
+            print(f"[Strip Paired] Message {i} ({msg.get('role')}): list with types {block_types}")
+        else:
+            print(f"[Strip Paired] Message {i} ({msg.get('role')}): string content")
         
         if isinstance(content, list):
             # Check if this message has tool_use or tool_result blocks
@@ -90,7 +99,8 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
             
             if has_tool_result:
                 # Skip entire message - it's a tool result without matching tool use
-                print(f"[Strip Paired] Skipping message {i} with tool_result blocks")
+                print(f"[Strip Paired] SKIPPING message {i} with tool_result blocks")
+                skipped_count += 1
                 i += 1
                 continue
             
@@ -101,9 +111,10 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
                 text = ' '.join(text_parts).strip()
                 if text:
                     result.append({'role': msg['role'], 'content': text})
-                    print(f"[Strip Paired] Message {i}: Kept text, stripped tool_use blocks")
+                    print(f"[Strip Paired] Message {i}: Kept text '{text[:50]}...', stripped tool_use blocks")
                 else:
-                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use blocks")
+                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use blocks, SKIPPING")
+                    skipped_count += 1
                 
                 # Skip next message if it's a tool_result response
                 if i + 1 < len(messages):
@@ -111,7 +122,8 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
                     if isinstance(next_content, list) and any(
                         b.get('type') == 'tool_result' for b in next_content if isinstance(b, dict)
                     ):
-                        print(f"[Strip Paired] Skipping message {i+1} with paired tool_result blocks")
+                        print(f"[Strip Paired] SKIPPING message {i+1} with paired tool_result blocks")
+                        skipped_count += 1
                         i += 2  # skip both this and the tool result
                         continue
                 
@@ -124,12 +136,15 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
             text = ' '.join(text_parts).strip()
             if text:
                 result.append({'role': msg['role'], 'content': text})
+                print(f"[Strip Paired] Message {i}: Kept text (no tool blocks)")
         
         elif isinstance(content, str) and content.strip():
             result.append({'role': msg['role'], 'content': content})
+            print(f"[Strip Paired] Message {i}: Kept string content")
         
         i += 1
     
+    print(f"[Strip Paired] Completed: {len(messages)} -> {len(result)} messages (skipped {skipped_count})")
     return result
 
 
