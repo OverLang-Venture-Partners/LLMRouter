@@ -165,6 +165,62 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     return result
 
 
+def convert_openai_to_bedrock_tools(messages: List[Dict]) -> List[Dict]:
+    """
+    Convert OpenAI tool format to Bedrock format.
+    
+    OpenAI format:
+    - Assistant message with tool_calls in the message object
+    - Separate message with role=tool containing the result
+    
+    Bedrock format (via LiteLLM):
+    - Assistant message with tool_calls
+    - User message with tool_result content blocks
+    
+    Args:
+        messages: List of message dicts in OpenAI format
+        
+    Returns:
+        Messages converted to Bedrock-compatible format
+    """
+    print(f"[Convert Tools] Starting with {len(messages)} messages", flush=True)
+    
+    result = []
+    i = 0
+    
+    while i < len(messages):
+        msg = messages[i]
+        role = msg.get('role', '')
+        content = msg.get('content', '')
+        
+        # Convert role=tool to role=user with tool_result content
+        if role == 'tool':
+            tool_call_id = msg.get('tool_call_id', '')
+            print(f"[Convert Tools] Message {i}: Converting role=tool to user with tool_result", flush=True)
+            
+            # Bedrock expects user message with tool_result content block
+            result.append({
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'tool_result',
+                        'tool_use_id': tool_call_id,
+                        'content': content
+                    }
+                ]
+            })
+            i += 1
+            continue
+        
+        # Pass through other messages as-is
+        result.append(msg)
+        print(f"[Convert Tools] Message {i}: Kept as role={role}", flush=True)
+        i += 1
+    
+    print(f"[Convert Tools] Completed: {len(messages)} -> {len(result)} messages", flush=True)
+    return result
+
+
 def fix_alternation(messages: List[Dict]) -> List[Dict]:
     """
     Ensure strict user/assistant alternation for Bedrock.
@@ -554,17 +610,17 @@ class LLMBackend:
                 detail="LiteLLM not installed. Install with: pip install litellm"
             )
         
-        # Strip tool blocks as paired units before sending to Bedrock
-        stripped = strip_tool_blocks_paired(messages)
+        # Convert OpenAI tool format to Bedrock format
+        converted = convert_openai_to_bedrock_tools(messages)
         
         # Fix alternation - merge consecutive same-role messages
-        fixed = fix_alternation(stripped)
+        fixed = fix_alternation(converted)
         
-        # Normalize the stripped messages
+        # Normalize the messages
         normalized = normalize_messages(fixed, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Stripped {len(stripped)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Converted {len(converted)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
         
         # Build completion kwargs
         completion_kwargs = {
@@ -667,21 +723,21 @@ class LLMBackend:
             m = messages[72]
             print(f"[MSG72 BEFORE] role={m['role']} type={type(m['content']).__name__} content={repr(str(m['content'])[:500])}", flush=True)
         
-        print(f"[DEBUG Bedrock Streaming] About to call strip_tool_blocks_paired...", flush=True)
+        print(f"[DEBUG Bedrock Streaming] About to convert OpenAI to Bedrock format...", flush=True)
         
-        # Strip tool blocks as paired units before sending to Bedrock
-        stripped = strip_tool_blocks_paired(messages)
+        # Convert OpenAI tool format to Bedrock format
+        converted = convert_openai_to_bedrock_tools(messages)
         
-        print(f"[DEBUG Bedrock Streaming] strip_tool_blocks_paired returned {len(stripped)} messages", flush=True)
+        print(f"[DEBUG Bedrock Streaming] convert_openai_to_bedrock_tools returned {len(converted)} messages", flush=True)
         
         # Fix alternation - merge consecutive same-role messages
-        fixed = fix_alternation(stripped)
+        fixed = fix_alternation(converted)
         
-        # Normalize the stripped messages
+        # Normalize the messages
         normalized = normalize_messages(fixed, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Stripped {len(stripped)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Converted {len(converted)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
         # Build completion kwargs
