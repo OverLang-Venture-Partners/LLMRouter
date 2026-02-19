@@ -62,70 +62,75 @@ class ChatRequest(BaseModel):
 # Message Processing
 # ============================================================
 
-def validate_tool_blocks(messages: List[Dict]) -> List[Dict]:
+def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     """
-    Validate and fix tool block pairing for Bedrock.
+    Strip tool_use and tool_result blocks as paired units.
     
-    Bedrock requires:
-    - Each tool_use block must be followed by a tool_result block
-    - No orphaned tool_result blocks
+    When an assistant message has tool_use blocks, we strip them AND
+    skip the following user message if it contains tool_result blocks.
+    This maintains Bedrock's strict conversation structure.
     
     Args:
         messages: List of message dicts
         
     Returns:
-        Cleaned messages with valid tool block pairing
+        Messages with tool blocks removed as paired units
     """
-    cleaned = []
+    result = []
+    i = 0
     
-    for msg in messages:
-        content = msg.get("content")
+    while i < len(messages):
+        msg = messages[i]
+        content = msg.get('content', '')
         
-        # Handle list content (multimodal/tool blocks)
         if isinstance(content, list):
-            # Track tool_use IDs to match with tool_results
-            tool_use_ids = set()
-            validated_blocks = []
+            # Check if this message has tool_use or tool_result blocks
+            has_tool_use = any(b.get('type') == 'tool_use' for b in content if isinstance(b, dict))
+            has_tool_result = any(b.get('type') == 'tool_result' for b in content if isinstance(b, dict))
             
-            # First pass: collect all tool_use IDs
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    tool_id = block.get("id")
-                    if tool_id:
-                        tool_use_ids.add(tool_id)
+            if has_tool_result:
+                # Skip entire message - it's a tool result without matching tool use
+                print(f"[Strip Paired] Skipping message {i} with tool_result blocks")
+                i += 1
+                continue
             
-            # Second pass: keep blocks that are valid
-            for block in content:
-                if not isinstance(block, dict):
-                    validated_blocks.append(block)
-                    continue
-                
-                block_type = block.get("type")
-                
-                if block_type == "tool_result":
-                    # Only keep tool_result if it has a matching tool_use
-                    tool_use_id = block.get("tool_use_id")
-                    if tool_use_id and tool_use_id in tool_use_ids:
-                        validated_blocks.append(block)
-                    else:
-                        print(f"[Validate] Removing orphaned tool_result with id={tool_use_id}")
+            if has_tool_use:
+                # Extract only text parts, skip the tool_use blocks
+                text_parts = [b.get('text', '') for b in content
+                             if isinstance(b, dict) and b.get('type') == 'text' and b.get('text')]
+                text = ' '.join(text_parts).strip()
+                if text:
+                    result.append({'role': msg['role'], 'content': text})
+                    print(f"[Strip Paired] Message {i}: Kept text, stripped tool_use blocks")
                 else:
-                    # Keep all other blocks (text, tool_use, image, etc.)
-                    validated_blocks.append(block)
+                    print(f"[Strip Paired] Message {i}: No text after stripping tool_use blocks")
+                
+                # Skip next message if it's a tool_result response
+                if i + 1 < len(messages):
+                    next_content = messages[i + 1].get('content', '')
+                    if isinstance(next_content, list) and any(
+                        b.get('type') == 'tool_result' for b in next_content if isinstance(b, dict)
+                    ):
+                        print(f"[Strip Paired] Skipping message {i+1} with paired tool_result blocks")
+                        i += 2  # skip both this and the tool result
+                        continue
+                
+                i += 1
+                continue
             
-            # Only include message if it has content after validation
-            if validated_blocks:
-                cleaned.append({
-                    "role": msg["role"],
-                    "content": validated_blocks
-                })
-            else:
-                print(f"[Validate] Skipped message with no valid content after tool block validation")
-        else:
-            # String content - keep as is
-            cleaned.append(msg)
+            # No tool blocks - extract text normally
+            text_parts = [b.get('text', '') for b in content
+                         if isinstance(b, dict) and b.get('type') == 'text' and b.get('text')]
+            text = ' '.join(text_parts).strip()
+            if text:
+                result.append({'role': msg['role'], 'content': text})
+        
+        elif isinstance(content, str) and content.strip():
+            result.append({'role': msg['role'], 'content': content})
+        
+        i += 1
     
-    return cleaned
+    return result
 
 
 def sanitize_messages_for_bedrock(messages: List[Dict]) -> List[Dict]:
@@ -464,15 +469,14 @@ class LLMBackend:
                 detail="LiteLLM not installed. Install with: pip install litellm"
             )
         
-        # Validate tool block pairing before sending to Bedrock
-        validated = validate_tool_blocks(messages)
+        # Strip tool blocks as paired units before sending to Bedrock
+        stripped = strip_tool_blocks_paired(messages)
         
-        # Don't strip tool blocks - let LiteLLM handle the format translation
-        # LiteLLM should convert Anthropic tool format to Bedrock's expected format
-        normalized = normalize_messages(validated, llm.model_id)
+        # Normalize the stripped messages
+        normalized = normalize_messages(stripped, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Validated {len(validated)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Stripped {len(stripped)} -> Normalized {len(normalized)} messages")
         
         # Build completion kwargs
         completion_kwargs = {
@@ -570,15 +574,14 @@ class LLMBackend:
         
         print(f"[DEBUG Bedrock Streaming] Received {len(messages)} messages")
         
-        # Validate tool block pairing before sending to Bedrock
-        validated = validate_tool_blocks(messages)
+        # Strip tool blocks as paired units before sending to Bedrock
+        stripped = strip_tool_blocks_paired(messages)
         
-        # Don't strip tool blocks - let LiteLLM handle the format translation
-        # LiteLLM should convert Anthropic tool format to Bedrock's expected format
-        normalized = normalize_messages(validated, llm.model_id)
+        # Normalize the stripped messages
+        normalized = normalize_messages(stripped, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Validated {len(validated)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Stripped {len(stripped)} -> Normalized {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
         # Build completion kwargs
