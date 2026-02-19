@@ -391,36 +391,14 @@ class LLMBackend:
                 detail="LiteLLM not installed. Install with: pip install litellm"
             )
         
-        # NUCLEAR OPTION: Force all content to plain text only, strip tool blocks completely
-        def force_text_only(msgs):
-            """Aggressively extract only text content, skip tool blocks entirely"""
-            result = []
-            for msg in msgs:
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    # Extract only text blocks
-                    text_parts = [
-                        b.get("text", "") for b in content 
-                        if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
-                    ]
-                    text = " ".join(text_parts).strip()
-                    if text:  # Only include if there's actual text content
-                        result.append({"role": msg["role"], "content": text})
-                    # else: skip the message entirely (was pure tool block)
-                elif isinstance(content, str) and content.strip():
-                    result.append({"role": msg["role"], "content": content})
-            return result
-        
-        # Apply aggressive text-only extraction
-        text_only = force_text_only(messages)
-        
-        # Then normalize the text-only messages
-        normalized = normalize_messages(text_only, llm.model_id)
+        # Don't strip tool blocks - let LiteLLM handle the format translation
+        # LiteLLM should convert Anthropic tool format to Bedrock's expected format
+        normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Text-only {len(text_only)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Sync] Processing {len(messages)} messages")
         
-        # Build completion kwargs - use normalized messages directly
+        # Build completion kwargs
         completion_kwargs = {
             'model': f"bedrock/{llm.model_id}",
             'messages': normalized,
@@ -436,19 +414,8 @@ class LLMBackend:
         if llm.aws_region:
             completion_kwargs['aws_region_name'] = llm.aws_region
         
-        # CRITICAL: Tell LiteLLM we're NOT using tools
-        # This prevents it from expecting toolConfig
-        completion_kwargs['tools'] = None
-        completion_kwargs['tool_choice'] = 'none'
-        
-        # TEMP DEBUG - print every message going to LiteLLM BEFORE the call
-        print(f"[DEBUG FINAL SYNC] Sending {len(normalized)} messages to LiteLLM:", flush=True)
-        for i, msg in enumerate(normalized):
-            content = msg.get('content', '')
-            if isinstance(content, list):
-                print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}", flush=True)
-            else:
-                print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}", flush=True)
+        # NOTE: We're NOT setting tools=None or tool_choice='none' anymore
+        # Let LiteLLM handle tool calls naturally if they're present in the conversation
         
         # Set LiteLLM to drop unsupported params silently
         import litellm
@@ -458,6 +425,27 @@ class LLMBackend:
             # Call LiteLLM completion
             response = completion(**completion_kwargs)
             
+            # Build message dict
+            message_dict = {
+                "role": "assistant",
+                "content": response.choices[0].message.content if response.choices else ""
+            }
+            
+            # Check for tool_calls in response (OpenAI format)
+            if response.choices and hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+                message_dict['tool_calls'] = [
+                    {
+                        "id": tc.id if hasattr(tc, 'id') else None,
+                        "type": tc.type if hasattr(tc, 'type') else "function",
+                        "function": {
+                            "name": tc.function.name if hasattr(tc.function, 'name') else None,
+                            "arguments": tc.function.arguments if hasattr(tc.function, 'arguments') else None
+                        }
+                    }
+                    for tc in response.choices[0].message.tool_calls
+                ]
+                print(f"[DEBUG Bedrock Sync] Detected tool_calls in response: {len(message_dict['tool_calls'])} tools")
+            
             # Convert to OpenAI format
             return {
                 "id": response.id if hasattr(response, 'id') else f"chatcmpl-{llm.name}",
@@ -465,10 +453,7 @@ class LLMBackend:
                 "model": llm.model_id,
                 "choices": [{
                     "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": response.choices[0].message.content if response.choices else ""
-                    },
+                    "message": message_dict,
                     "finish_reason": response.choices[0].finish_reason if response.choices else "stop"
                 }],
                 "usage": {
@@ -499,63 +484,15 @@ class LLMBackend:
         
         print(f"[DEBUG Bedrock Streaming] Received {len(messages)} messages")
         
-        # Debug: Check for tool blocks in original messages
-        tool_block_count = 0
-        for i, msg in enumerate(messages):
-            if isinstance(msg.get("content"), list):
-                for block in msg["content"]:
-                    if isinstance(block, dict) and block.get("type") in ("tool_use", "tool_result"):
-                        tool_block_count += 1
-        
-        if tool_block_count > 0:
-            print(f"[DEBUG Bedrock Streaming] Found {tool_block_count} tool blocks in original messages")
-        
-        # NUCLEAR OPTION: Force all content to plain text only, strip tool blocks completely
-        def force_text_only(msgs):
-            """Aggressively extract only text content, skip tool blocks entirely"""
-            result = []
-            for msg in msgs:
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    # Extract only text blocks
-                    text_parts = [
-                        b.get("text", "") for b in content 
-                        if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
-                    ]
-                    text = " ".join(text_parts).strip()
-                    if text:  # Only include if there's actual text content
-                        result.append({"role": msg["role"], "content": text})
-                    # else: skip the message entirely (was pure tool block)
-                elif isinstance(content, str) and content.strip():
-                    result.append({"role": msg["role"], "content": content})
-            return result
-        
-        # Apply aggressive text-only extraction
-        text_only = force_text_only(messages)
-        
-        # Then normalize the text-only messages
-        normalized = normalize_messages(text_only, llm.model_id)
+        # Don't strip tool blocks - let LiteLLM handle the format translation
+        # LiteLLM should convert Anthropic tool format to Bedrock's expected format
+        normalized = normalize_messages(messages, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Text-only {len(text_only)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Normalized to {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
-        # Deep inspection: verify NO tool blocks in final messages
-        def has_tool_blocks(msgs):
-            for msg in msgs:
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") in ("tool_use", "tool_result"):
-                            return True, msg
-            return False, None
-        
-        found, offending = has_tool_blocks(normalized)
-        print(f"[DEBUG Bedrock] Tool blocks present in final messages: {found}")
-        if offending:
-            print(f"[DEBUG Bedrock] CRITICAL: Offending message role={offending['role']}, content={str(offending['content'])[:200]}")
-        
-        # Build completion kwargs - use normalized messages directly
+        # Build completion kwargs
         completion_kwargs = {
             'model': f"bedrock/{llm.model_id}",
             'messages': normalized,
@@ -571,10 +508,8 @@ class LLMBackend:
         if llm.aws_region:
             completion_kwargs['aws_region_name'] = llm.aws_region
         
-        # CRITICAL: Tell LiteLLM we're NOT using tools
-        # This prevents it from expecting toolConfig
-        completion_kwargs['tools'] = None
-        completion_kwargs['tool_choice'] = 'none'
+        # NOTE: We're NOT setting tools=None or tool_choice='none' anymore
+        # Let LiteLLM handle tool calls naturally if they're present in the conversation
         
         # TEMP DEBUG - print every message going to LiteLLM BEFORE the call
         print(f"[DEBUG FINAL] Sending {len(normalized)} messages to LiteLLM:", flush=True)
@@ -600,6 +535,13 @@ class LLMBackend:
             for chunk in response:
                 chunk_count += 1
                 
+                # DEBUG: Print raw chunk to see what LiteLLM returns
+                if chunk_count <= 3:  # Only log first few chunks
+                    print(f"[DEBUG Bedrock Chunk {chunk_count}] Raw chunk type: {type(chunk)}")
+                    print(f"[DEBUG Bedrock Chunk {chunk_count}] Chunk attributes: {dir(chunk)}")
+                    if hasattr(chunk, 'choices') and chunk.choices:
+                        print(f"[DEBUG Bedrock Chunk {chunk_count}] Choice delta: {chunk.choices[0].delta if hasattr(chunk.choices[0], 'delta') else 'NO DELTA'}")
+                
                 if hasattr(chunk, 'choices') and chunk.choices:
                     choice = chunk.choices[0]
                     delta = {}
@@ -609,6 +551,22 @@ class LLMBackend:
                             delta['role'] = choice.delta.role
                         if hasattr(choice.delta, 'content') and choice.delta.content:
                             delta['content'] = choice.delta.content
+                        
+                        # Check for tool_calls in delta (OpenAI format)
+                        if hasattr(choice.delta, 'tool_calls') and choice.delta.tool_calls:
+                            delta['tool_calls'] = [
+                                {
+                                    "index": tc.index if hasattr(tc, 'index') else 0,
+                                    "id": tc.id if hasattr(tc, 'id') else None,
+                                    "type": tc.type if hasattr(tc, 'type') else "function",
+                                    "function": {
+                                        "name": tc.function.name if hasattr(tc.function, 'name') else None,
+                                        "arguments": tc.function.arguments if hasattr(tc.function, 'arguments') else None
+                                    }
+                                }
+                                for tc in choice.delta.tool_calls
+                            ]
+                            print(f"[DEBUG Bedrock] Detected tool_calls in delta: {delta['tool_calls']}")
                     
                     finish_reason = getattr(choice, 'finish_reason', None)
                     
