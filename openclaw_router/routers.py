@@ -140,11 +140,14 @@ Available models:
 {chr(10).join(model_descriptions)}
 
 Rules:
-1. Simple greetings/daily chat -> cheaper models (nova-micro)
-2. General Q&A/knowledge retrieval -> nova-2-lite
-3. Reasoning/analysis tasks -> nova-pro or haiku
-4. Complex reasoning/long-form writing -> sonnet
-5. Deep analysis/research -> opus
+1. NEVER use nova-micro - it doesn't support tool calling (required for agent workflows)
+2. Default choice: nova-2-lite (good balance, supports tools)
+3. Simple Q&A without tools -> nova-2-lite
+4. Reasoning/analysis tasks -> nova-pro or haiku
+5. Complex reasoning/long-form writing -> sonnet
+6. Deep analysis/research -> opus
+
+CRITICAL: nova-micro cannot be used because the agent requires tool calling support.
 
 IMPORTANT: Only return the model name, nothing else!
 Model names: {', '.join(models)}
