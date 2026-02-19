@@ -501,9 +501,10 @@ class LLMBackend:
         # NOTE: We're NOT setting tools=None or tool_choice='none' anymore
         # Let LiteLLM handle tool calls naturally if they're present in the conversation
         
-        # Set LiteLLM to drop unsupported params silently
+        # Set LiteLLM to drop unsupported params silently and auto-fix message structure
         import litellm
         litellm.drop_params = True
+        litellm.modify_params = True  # Let LiteLLM fix consecutive user/tool blocks automatically
         
         try:
             # Call LiteLLM completion
@@ -618,9 +619,10 @@ class LLMBackend:
         
         print(f"[DEBUG Bedrock Streaming] Calling LiteLLM completion...", flush=True)
         
-        # Set LiteLLM to drop unsupported params silently
+        # Set LiteLLM to drop unsupported params silently and auto-fix message structure
         import litellm
         litellm.drop_params = True
+        litellm.modify_params = True  # Let LiteLLM fix consecutive user/tool blocks automatically
         
         try:
             # Call LiteLLM completion with streaming
