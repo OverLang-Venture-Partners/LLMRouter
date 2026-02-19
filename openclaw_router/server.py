@@ -165,6 +165,59 @@ def strip_tool_blocks_paired(messages: List[Dict]) -> List[Dict]:
     return result
 
 
+def fix_alternation(messages: List[Dict]) -> List[Dict]:
+    """
+    Ensure strict user/assistant alternation for Bedrock.
+    
+    After stripping tool messages, we may have consecutive messages with the same role.
+    Bedrock requires strict user → assistant → user → assistant alternation.
+    This function merges consecutive same-role messages.
+    
+    Args:
+        messages: List of message dicts (potentially with consecutive same-role messages)
+        
+    Returns:
+        Messages with strict alternation enforced
+    """
+    if not messages:
+        return messages
+    
+    print(f"[Fix Alternation] Starting with {len(messages)} messages", flush=True)
+    
+    result = []
+    for i, msg in enumerate(messages):
+        role = msg.get('role')
+        content = msg.get('content', '')
+        
+        # Remap 'developer' to 'system' for Bedrock
+        if role == 'developer':
+            role = 'system'
+            msg = {**msg, 'role': 'system'}
+        
+        if not result:
+            result.append(msg)
+            print(f"[Fix Alternation] Message {i}: First message, role={role}", flush=True)
+            continue
+        
+        last_role = result[-1].get('role')
+        
+        if role == last_role and role in ('user', 'assistant'):
+            # Merge with previous message
+            prev_content = result[-1].get('content', '')
+            merged_content = prev_content + '\n\n' + content
+            result[-1] = {
+                'role': role,
+                'content': merged_content
+            }
+            print(f"[Fix Alternation] Message {i}: Merged with previous {role} message", flush=True)
+        else:
+            result.append(msg)
+            print(f"[Fix Alternation] Message {i}: Added, role={role}", flush=True)
+    
+    print(f"[Fix Alternation] Completed: {len(messages)} -> {len(result)} messages", flush=True)
+    return result
+
+
 def sanitize_messages_for_bedrock(messages: List[Dict]) -> List[Dict]:
     """
     Remove tool_use and tool_result blocks from messages for Bedrock.
@@ -504,11 +557,14 @@ class LLMBackend:
         # Strip tool blocks as paired units before sending to Bedrock
         stripped = strip_tool_blocks_paired(messages)
         
+        # Fix alternation - merge consecutive same-role messages
+        fixed = fix_alternation(stripped)
+        
         # Normalize the stripped messages
-        normalized = normalize_messages(stripped, llm.model_id)
+        normalized = normalize_messages(fixed, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Stripped {len(stripped)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Sync] Original {len(messages)} -> Stripped {len(stripped)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
         
         # Build completion kwargs
         completion_kwargs = {
@@ -618,11 +674,14 @@ class LLMBackend:
         
         print(f"[DEBUG Bedrock Streaming] strip_tool_blocks_paired returned {len(stripped)} messages", flush=True)
         
+        # Fix alternation - merge consecutive same-role messages
+        fixed = fix_alternation(stripped)
+        
         # Normalize the stripped messages
-        normalized = normalize_messages(stripped, llm.model_id)
+        normalized = normalize_messages(fixed, llm.model_id)
         adjusted_max = adjust_max_tokens(normalized, llm.model_id, max_tokens)
         
-        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Stripped {len(stripped)} -> Normalized {len(normalized)} messages")
+        print(f"[DEBUG Bedrock Streaming] Original {len(messages)} -> Stripped {len(stripped)} -> Fixed {len(fixed)} -> Normalized {len(normalized)} messages")
         print(f"[DEBUG Bedrock Streaming] Model: {llm.model_id}, Max tokens: {adjusted_max}")
         
         # Build completion kwargs
