@@ -443,20 +443,20 @@ class LLMBackend:
         completion_kwargs['tools'] = None
         completion_kwargs['tool_choice'] = 'none'
         
+        # TEMP DEBUG - print every message going to LiteLLM BEFORE the call
+        print(f"[DEBUG FINAL SYNC] Sending {len(normalized)} messages to LiteLLM:", flush=True)
+        for i, msg in enumerate(normalized):
+            content = msg.get('content', '')
+            if isinstance(content, list):
+                print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}", flush=True)
+            else:
+                print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}", flush=True)
+        
+        # Set LiteLLM to drop unsupported params silently
+        import litellm
+        litellm.drop_params = True
+        
         try:
-            # TEMP DEBUG - print every message going to LiteLLM
-            print(f"[DEBUG FINAL SYNC] Sending {len(normalized)} messages to LiteLLM:")
-            for i, msg in enumerate(normalized):
-                content = msg.get('content', '')
-                if isinstance(content, list):
-                    print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}")
-                else:
-                    print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}")
-            
-            # Set LiteLLM to drop unsupported params silently
-            import litellm
-            litellm.drop_params = True
-            
             # Call LiteLLM completion
             response = completion(**completion_kwargs)
             
@@ -580,22 +580,22 @@ class LLMBackend:
         completion_kwargs['tools'] = None
         completion_kwargs['tool_choice'] = 'none'
         
+        # TEMP DEBUG - print every message going to LiteLLM BEFORE the call
+        print(f"[DEBUG FINAL] Sending {len(normalized)} messages to LiteLLM:", flush=True)
+        for i, msg in enumerate(normalized):
+            content = msg.get('content', '')
+            if isinstance(content, list):
+                print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}", flush=True)
+            else:
+                print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}", flush=True)
+        
+        print(f"[DEBUG Bedrock Streaming] Calling LiteLLM completion...", flush=True)
+        
+        # Set LiteLLM to drop unsupported params silently
+        import litellm
+        litellm.drop_params = True
+        
         try:
-            # TEMP DEBUG - print every message going to LiteLLM
-            print(f"[DEBUG FINAL] Sending {len(normalized)} messages to LiteLLM:")
-            for i, msg in enumerate(normalized):
-                content = msg.get('content', '')
-                if isinstance(content, list):
-                    print(f"  [{i}] role={msg['role']} content=LIST: {json.dumps(content)[:300]}")
-                else:
-                    print(f"  [{i}] role={msg['role']} content=STR len={len(str(content))}")
-            
-            print(f"[DEBUG Bedrock Streaming] Calling LiteLLM completion...")
-            
-            # Set LiteLLM to drop unsupported params silently
-            import litellm
-            litellm.drop_params = True
-            
             # Call LiteLLM completion with streaming
             response = completion(**completion_kwargs)
             

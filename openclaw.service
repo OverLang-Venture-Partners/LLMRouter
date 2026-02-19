@@ -6,9 +6,10 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/.openclaw/LLMRouter
-ExecStart=/home/ubuntu/miniconda3/envs/llmrouter/bin/python -m openclaw_router.server --config /home/ubuntu/.openclaw/LLMRouter/configs/openclaw_bedrock_corrected.yaml
+ExecStart=/home/ubuntu/miniconda3/envs/llmrouter/bin/python -u -m openclaw_router.server --config /home/ubuntu/.openclaw/LLMRouter/configs/openclaw_bedrock_corrected.yaml
 Restart=always
 RestartSec=10
+Environment=PYTHONUNBUFFERED=1
 Environment=API_KEYS={"bedrock":""}
 Environment=AWS_REGION=us-west-2
 Environment=AWS_DEFAULT_REGION=us-west-2
