@@ -54,6 +54,8 @@ class ChatRequest(BaseModel):
     max_tokens: Optional[int] = 4096
     stream: Optional[bool] = False
     user: Optional[str] = None  # Optional user id (used for memory scoping if enabled)
+    tools: Optional[List[Dict]] = None  # Tool definitions from OpenClaw
+    tool_choice: Optional[Any] = None  # Tool choice strategy
 
 
 # ============================================================
@@ -288,7 +290,8 @@ class LLMBackend:
         self.config = config
 
     async def call(self, llm_name: str, messages: List[Dict], max_tokens: int = 4096,
-                   temperature: Optional[float] = None, stream: bool = False):
+                   temperature: Optional[float] = None, stream: bool = False,
+                   tools: Optional[List[Dict]] = None, tool_choice: Optional[Any] = None):
         """Call LLM API"""
         if llm_name not in self.config.llms:
             raise HTTPException(status_code=404, detail=f"LLM '{llm_name}' not found")
@@ -299,9 +302,9 @@ class LLMBackend:
         if _is_bedrock_provider(llm_config):
             # Use Bedrock path
             if stream:
-                return self._call_bedrock_streaming(llm_config, messages, max_tokens, temperature)
+                return self._call_bedrock_streaming(llm_config, messages, max_tokens, temperature, tools, tool_choice)
             else:
-                return await self._call_bedrock_sync(llm_config, messages, max_tokens, temperature)
+                return await self._call_bedrock_sync(llm_config, messages, max_tokens, temperature, tools, tool_choice)
         else:
             # Use existing HTTP path for OpenAI-compatible providers
             api_key = self.config.get_api_key(llm_config.provider, llm_config)
@@ -381,7 +384,8 @@ class LLMBackend:
                         yield line + "\n\n"
 
     async def _call_bedrock_sync(self, llm: LLMConfig, messages: List[Dict], max_tokens: int,
-                                 temperature: Optional[float]) -> Dict:
+                                 temperature: Optional[float], tools: Optional[List[Dict]] = None,
+                                 tool_choice: Optional[Any] = None) -> Dict:
         """Synchronous Bedrock API call using LiteLLM"""
         try:
             from litellm import completion
@@ -413,6 +417,14 @@ class LLMBackend:
         # Add AWS region if specified
         if llm.aws_region:
             completion_kwargs['aws_region_name'] = llm.aws_region
+        
+        # Pass through tools if provided by OpenClaw
+        if tools:
+            completion_kwargs['tools'] = tools
+            print(f"[DEBUG Bedrock Sync] Passing {len(tools)} tools to LiteLLM")
+        if tool_choice:
+            completion_kwargs['tool_choice'] = tool_choice
+            print(f"[DEBUG Bedrock Sync] Tool choice: {tool_choice}")
         
         # NOTE: We're NOT setting tools=None or tool_choice='none' anymore
         # Let LiteLLM handle tool calls naturally if they're present in the conversation
@@ -473,7 +485,8 @@ class LLMBackend:
             raise HTTPException(status_code=500, detail=str(e))
 
     async def _call_bedrock_streaming(self, llm: LLMConfig, messages: List[Dict], max_tokens: int,
-                                      temperature: Optional[float]) -> AsyncGenerator:
+                                      temperature: Optional[float], tools: Optional[List[Dict]] = None,
+                                      tool_choice: Optional[Any] = None) -> AsyncGenerator:
         """Streaming Bedrock API call using LiteLLM"""
         try:
             # Import LiteLLM for streaming
@@ -507,6 +520,14 @@ class LLMBackend:
         # Add AWS region if specified
         if llm.aws_region:
             completion_kwargs['aws_region_name'] = llm.aws_region
+        
+        # Pass through tools if provided by OpenClaw
+        if tools:
+            completion_kwargs['tools'] = tools
+            print(f"[DEBUG Bedrock Streaming] Passing {len(tools)} tools to LiteLLM")
+        if tool_choice:
+            completion_kwargs['tool_choice'] = tool_choice
+            print(f"[DEBUG Bedrock Streaming] Tool choice: {tool_choice}")
         
         # NOTE: We're NOT setting tools=None or tool_choice='none' anymore
         # Let LiteLLM handle tool calls naturally if they're present in the conversation
@@ -707,7 +728,8 @@ def create_app(config: OpenClawConfig = None, config_path: str = None) -> FastAP
                 try:
                     stream_gen = await backend.call(
                         selected_model, messages, request.max_tokens,
-                        request.temperature, stream=True
+                        request.temperature, stream=True,
+                        tools=request.tools, tool_choice=request.tool_choice
                     )
                     async for chunk in stream_gen:
                         chunk_count += 1
@@ -772,7 +794,8 @@ def create_app(config: OpenClawConfig = None, config_path: str = None) -> FastAP
         else:
             result = await backend.call(
                 selected_model, messages, request.max_tokens,
-                request.temperature, stream=False
+                request.temperature, stream=False,
+                tools=request.tools, tool_choice=request.tool_choice
             )
 
             # Add model prefix
