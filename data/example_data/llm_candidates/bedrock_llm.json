@@ -1,0 +1,62 @@
+{
+  "nova-micro": {
+    "model_name": "us.amazon.nova-micro-v1:0",
+    "provider": "bedrock",
+    "description": "Ultra-cheap routing/triage model with basic capabilities",
+    "input_price": 0.035,
+    "output_price": 0.14,
+    "context_window": 128000,
+    "capabilities": ["text"],
+    "use_cases": ["simple queries", "routing", "triage", "basic Q&A"]
+  },
+  "nova-2-lite": {
+    "model_name": "global.amazon.nova-2-lite-v1:0",
+    "provider": "bedrock",
+    "description": "Primary workhorse - multimodal with 1M context window",
+    "input_price": 0.30,
+    "output_price": 2.50,
+    "context_window": 1000000,
+    "capabilities": ["text", "vision", "multimodal"],
+    "use_cases": ["general purpose", "long context", "multimodal tasks", "document analysis"]
+  },
+  "nova-pro": {
+    "model_name": "us.amazon.nova-pro-v1:0",
+    "provider": "bedrock",
+    "description": "Advanced reasoning and complex problem solving",
+    "input_price": 0.80,
+    "output_price": 3.20,
+    "context_window": 300000,
+    "capabilities": ["text", "reasoning"],
+    "use_cases": ["reasoning tasks", "complex analysis", "technical problems", "code generation"]
+  },
+  "haiku": {
+    "model_name": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "provider": "bedrock",
+    "description": "Claude family entry - fast with prompt caching",
+    "input_price": 0.80,
+    "output_price": 4.00,
+    "context_window": 200000,
+    "capabilities": ["text", "prompt_caching"],
+    "use_cases": ["fast responses", "cached prompts", "repetitive tasks", "API calls"]
+  },
+  "sonnet": {
+    "model_name": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "provider": "bedrock",
+    "description": "Complex reasoning - long-form writing and architecture",
+    "input_price": 3.00,
+    "output_price": 15.00,
+    "context_window": 200000,
+    "capabilities": ["text", "reasoning", "prompt_caching"],
+    "use_cases": ["complex reasoning", "long-form writing", "architecture design", "detailed analysis"]
+  },
+  "opus": {
+    "model_name": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+    "provider": "bedrock",
+    "description": "Deep think only - maximum reasoning depth",
+    "input_price": 15.00,
+    "output_price": 75.00,
+    "context_window": 200000,
+    "capabilities": ["text", "deep_reasoning", "prompt_caching"],
+    "use_cases": ["deep reasoning", "research", "complex problem solving", "expert-level analysis"]
+  }
+}
